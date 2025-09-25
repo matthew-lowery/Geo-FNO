@@ -1,7 +1,8 @@
 """
 @author: Zongyi Li and Daniel Zhengyu Huang
 """
-
+import sys
+sys.path.append('..')
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from timeit import default_timer
@@ -147,7 +148,7 @@ ntrain = 1000
 ntest = 200
 N = 1200
 
-batch_size = 20
+batch_size = 10
 learning_rate = 0.001
 
 epochs = 501
@@ -198,12 +199,16 @@ optimizer = Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
 
 myloss = LpLoss(size_average=False)
-
-for ep in range(epochs):
+import time
+train_times = []
+test_times = []
+for ep in range(10):
+    tik = time.perf_counter()
     model.train()
     t1 = default_timer()
     train_l2 = 0
     for x, y in train_loader:
+        
         x, y = x.cuda(), y.cuda()
 
         optimizer.zero_grad()
@@ -214,6 +219,9 @@ for ep in range(epochs):
 
         optimizer.step()
         train_l2 += loss.item()
+    tok = time.perf_counter()
+    print(tok-tik, 'here')
+    train_times.append(tok - tik)
 
     scheduler.step()
 
@@ -221,29 +229,38 @@ for ep in range(epochs):
     test_l2 = 0.0
     with torch.no_grad():
         for x, y in test_loader:
+            tik = time.perf_counter()
             x, y = x.cuda(), y.cuda()
 
             out = model(x)
 
             test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
+            tok = time.perf_counter()
+            print(tok-tik)
+            test_times.append(tok-tik)
 
     train_l2 /= ntrain
     test_l2 /= ntest
 
+
+
+
     t2 = default_timer()
     print(ep, t2 - t1, train_l2, test_l2)
 
-    if ep%step_size==0:
-        # torch.save(model, '../model/pipe_' + str(ep))
-        X = x[0, :, :, 0].squeeze().detach().cpu().numpy()
-        Y = x[0, :, :, 1].squeeze().detach().cpu().numpy()
-        truth = y[0].squeeze().detach().cpu().numpy()
-        pred = out[0].squeeze().detach().cpu().numpy()
+print(np.asarray(train_times).mean(), 
+    np.asarray(test_times).mean())
+    # if ep%step_size==0:
+    #     # torch.save(model, '../model/pipe_' + str(ep))
+    #     X = x[0, :, :, 0].squeeze().detach().cpu().numpy()
+    #     Y = x[0, :, :, 1].squeeze().detach().cpu().numpy()
+    #     truth = y[0].squeeze().detach().cpu().numpy()
+    #     pred = out[0].squeeze().detach().cpu().numpy()
 
-        fig, ax = plt.subplots(nrows=3, figsize=(16, 16))
-        ax[0].pcolormesh(X, Y, truth, shading='gouraud')
-        ax[1].pcolormesh(X, Y, pred, shading='gouraud')
-        ax[2].pcolormesh(X, Y, pred-truth, shading='gouraud')
-        fig.show()
+    #     fig, ax = plt.subplots(nrows=3, figsize=(16, 16))
+    #     ax[0].pcolormesh(X, Y, truth, shading='gouraud')
+    #     ax[1].pcolormesh(X, Y, pred, shading='gouraud')
+    #     ax[2].pcolormesh(X, Y, pred-truth, shading='gouraud')
+    #     fig.show()
 
 
