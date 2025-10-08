@@ -1,3 +1,0 @@
-Namespace(modes=8, res1d=16, width=16)
-torch.Size([1200, 4325, 1]) torch.Size([1200, 4325, 1]) torch.Size([1200, 4325, 3]) torch.Size([1200, 4325, 3])
-2624961 29027
