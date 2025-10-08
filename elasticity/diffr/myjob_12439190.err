@@ -1,0 +1,3 @@
+/u/mlowery/Geo-FNO/elasticity/diffr.py:293: UserWarning: Specified kernel cache directory could not be created! This disables kernel caching. Specified directory is /u/mlowery/.cache/torch/kernels. This warning will appear only once per process. (Triggered internally at ../aten/src/ATen/native/cuda/jit_utils.cpp:1442.)
+  basis = torch.exp(-1j * 2 * np.pi * phase)              # (B,N,|k1|,|k2|,m3)
+slurmstepd: error: *** JOB 12439190 ON gpua067 CANCELLED AT 2025-09-24T23:48:57 ***

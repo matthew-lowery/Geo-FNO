@@ -11,6 +11,13 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+def set_seed(seed):    
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    torch.cuda.manual_seed(seed)
+
+torch.backends.cudnn.deterministic = True
+
 # class SpectralConv3d(nn.Module):
 #     """
 #     3D GeoFNO spectral layer with ALL four cases handled:
@@ -570,10 +577,12 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--modes', type=int, default=12)
 parser.add_argument('--res1d', type=int, default=40)
 parser.add_argument('--width', type=int, default=32)
+parser.add_argument('--seed', type=int, default=0)
 ### num sin features
 args = parser.parse_args()
-
-batch_size = 1
+print(args)
+set_seed(args.seed)
+batch_size = 100
 learning_rate_fno = 0.001
 learning_rate_iphi = 0.0001
 
@@ -609,10 +618,10 @@ model = FNO3d(args.modes, args.width, in_channels=4, out_channels=1, is_mesh=Fal
 model_iphi = IPHI3d().cuda()
 print(count_params(model), count_params(model_iphi))
 
-optimizer_fno = Adam(model.parameters(), lr=learning_rate_fno, weight_decay=1e-4)
-scheduler_fno = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_fno, T_max = 200)
+optimizer_fno = Adam(model.parameters(), lr=learning_rate_fno, weight_decay=1e-3)
+scheduler_fno = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_fno, T_max = epochs)
 optimizer_iphi = Adam(model_iphi.parameters(), lr=learning_rate_iphi, weight_decay=1e-4)
-scheduler_iphi = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_iphi, T_max = 200)
+scheduler_iphi = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_iphi, T_max = epochs)
 
 myloss = LpLoss(size_average=False)
 N_sample = 1000
