@@ -25,59 +25,63 @@ parser.add_argument('--width', type=int, default=32)
 parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--lr-phi', type=float, default=1e-4)
 parser.add_argument('--lr-fno', type=float, default=1e-3)
-parser.add_argument('--n-train', type=int, default=10_000)
+parser.add_argument('--ntrain', type=int, default=10_000)
 parser.add_argument('--epochs', type=int, default=10_000)
 parser.add_argument('--norm-grid', action='store_true')
+parser.add_argument('--batch-size', type=int, default=100)
+parser.add_argument('--dataset', type=str, default='backward_facing_step', choices=['backward_facing_step', 
+                                                                                    'buoyancy_cavity_flow', 
+                                                                                    'flow_cylinder_laminar', 
+                                                                                    'flow_cylinder_shedding', 
+                                                                                    'lid_cavity_flow', 
+                                                                                    'merge_vortices', 
+                                                                                    'taylor_green_exact', 
+                                                                                    'taylor_green_numerical'])
+
 
 args = parser.parse_args()
 print(args)
 set_seed(args.seed)
-batch_size = 100
+batch_size = args.batch_size
 learning_rate_fno = args.lr_fno
 learning_rate_iphi = args.lr_phi
 
 epochs = args.epochs
-
+ntrain,ntest = args.ntrain, 200
 ### num freqs, modes, width, latent resolution
 
 modes = args.modes
 width = args.width
 
+N = 10_000
+
 #######################################################################################
 ### load data 
 
-### adding normalization, adding wandb, how to handle squares outside of [0,1]^2
-fp = './data/darcy_triangular.npz'
-data = np.load(fp)
-x_grid = data["bc_coords"]
-x = data["k"]
-y_grid = data["mesh_grid"]
-y = data["h"]
-print(x_grid.shape, x.shape, y.shape, y_grid.shape)
-dataset = fp.split('/')[-1].split('.')[0]
-y = y.reshape(2000, -1, 1)
-x = x.reshape(2000, -1, 1)
-
+data = np.load(f'./data/{args.dataset}.npz')
+x_grid = data['x_grid']
+train_x, test_x, train_y, test_y = data['x_train'], data['x_test'], data['y_train'], data['y_test']
+train_x, train_y = train_x[:ntrain], train_y[:ntrain]
 
 if args.norm_grid:
     x_grid_min, x_grid_max = np.min(x_grid, axis=0, keepdims=True), np.max(x_grid, axis=0, keepdims=True)
     x_grid = (x_grid - x_grid_min) / (x_grid_max-x_grid_min)
-    y_grid = (y_grid - x_grid_min) / (x_grid_max-x_grid_min)
+y_grid = x_grid
     
-x_grid = np.repeat(x_grid[None], 2000, axis=0)
-y_grid = np.repeat(y_grid[None], 2000, axis=0)
-ntrain,ntest = args.n_train, 100
-in_channels = 3
-out_channels = 1
+x_grid = np.repeat(x_grid[None], ntrain+ntest, axis=0)
+y_grid = x_grid
 
-print(x.shape, y.shape, x_grid.shape, y_grid.shape)
+in_channels = train_x.shape[-1] + x_grid.shape[-1]
+out_channels = train_y.shape[-1]
+
 ########################################################################################
 
-x,x_grid,y,y_grid = torch.tensor(x, dtype=torch.float32), torch.tensor(x_grid, dtype=torch.float32), torch.tensor(y, dtype=torch.float32), torch.tensor(y_grid, dtype=torch.float32)
+train_x, test_x, x_grid, y_grid, train_y, test_y = torch.tensor(train_x, dtype=torch.float32), torch.tensor(test_x, dtype=torch.float32), \
+                                                    torch.tensor(x_grid, dtype=torch.float32), torch.tensor(y_grid, dtype=torch.float32), \
+                                                    torch.tensor(train_y, dtype=torch.float32), torch.tensor(test_y, dtype=torch.float32)
 
-print(x.shape, y.shape, x_grid.shape, y_grid.shape)
-train_x, train_x_grid, train_y, train_y_grid = x[:ntrain], x_grid[:ntrain], y[:ntrain], y_grid[:ntrain]
-test_x, test_x_grid, test_y, test_y_grid = x[-ntest:], x_grid[-ntest:], y[-ntest:], y_grid[-ntest:]
+train_x_grid, train_y_grid = x_grid[:ntrain], y_grid[:ntrain]
+test_x_grid, test_y_grid = x_grid[-ntest:], y_grid[-ntest:]
 
 x_normalizer = UnitGaussianNormalizer(train_x)
 
