@@ -35,7 +35,7 @@ for depth in 2 3 4 5; do
 sp "python3 -u ramansh.py --dataset=$dataset --norm-grid --width=32 --depth=$depth --res-1d=30"
 done
 for s in 30 40 50 60; do
-sp "python3 -u ramansh.py --dataset=$dataset --norm-grid --width=32 --depth=3 --res-1d=30"
+sp "python3 -u ramansh.py --dataset=$dataset --modes=$((s/2)) --norm-grid --width=32 --depth=3 --res-1d=30"
 done
 done
 
