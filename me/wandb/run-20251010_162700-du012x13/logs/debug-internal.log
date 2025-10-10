@@ -1,0 +1,12 @@
+{"time":"2025-10-10T16:27:00.653158-06:00","level":"INFO","msg":"using version","core version":"0.19.1"}
+{"time":"2025-10-10T16:27:00.653189-06:00","level":"INFO","msg":"created symlink","path":"/Users/mattlowery/Desktop/code/Geo-FNO/me/wandb/run-20251010_162700-du012x13/logs/debug-core.log"}
+{"time":"2025-10-10T16:27:00.963643-06:00","level":"INFO","msg":"created new stream","id":"du012x13"}
+{"time":"2025-10-10T16:27:00.963697-06:00","level":"INFO","msg":"stream: started","id":"du012x13"}
+{"time":"2025-10-10T16:27:00.963756-06:00","level":"INFO","msg":"sender: started","stream_id":"du012x13"}
+{"time":"2025-10-10T16:27:00.963749-06:00","level":"INFO","msg":"handler: started","stream_id":"du012x13"}
+{"time":"2025-10-10T16:27:00.963755-06:00","level":"INFO","msg":"writer: Do: started","stream_id":"du012x13"}
+{"time":"2025-10-10T16:27:01.272752-06:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-10-10T16:27:03.270348-06:00","level":"INFO","msg":"stream: closing","id":"du012x13"}
+{"time":"2025-10-10T16:27:03.270379-06:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-10-10T16:27:03.270687-06:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-10-10T16:27:03.748628-06:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}

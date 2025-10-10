@@ -5,14 +5,13 @@ import sys
 sys.path.append('..')
 from utilities3 import *
 from Adam import Adam
+from model_cpu import FNO2d, IPHI
 import os
-from model import FNO2d, IPHI
 import wandb
-
 def set_seed(seed):    
     torch.manual_seed(seed)
     np.random.seed(seed)
-    torch.cuda.manual_seed(seed)
+    # torch.cuda.manual_seed(seed)
 
 torch.backends.cudnn.deterministic = True
 
@@ -31,8 +30,8 @@ parser.add_argument('--lr-fno', type=float, default=1e-3)
 parser.add_argument('--ntrain', type=int, default=1_000)
 parser.add_argument('--epochs', type=int, default=1_000)
 parser.add_argument('--norm-grid', action='store_true')
-parser.add_argument('--batch-size', type=int, default=100)
 parser.add_argument('--wandb', action='store_true')
+parser.add_argument('--batch-size', type=int, default=100)
 parser.add_argument('--dataset', type=str, default='backward_facing_step', choices=['backward_facing_step', 
                                                                                     'buoyancy_cavity_flow', 
                                                                                     'flow_cylinder_laminar', 
@@ -51,6 +50,7 @@ if not args.wandb:
 wandb.login(key='d612cda26a5690e196d092756d668fc2aee8525b')
 wandb.init(project=args.dataset)
 wandb.config.update(args)
+
 
 set_seed(args.seed)
 batch_size = args.batch_size
@@ -106,8 +106,8 @@ test_x = x_normalizer.encode(test_x)
 
 y_normalizer = UnitGaussianNormalizer(train_y)
 
-x_normalizer.cuda()
-y_normalizer.cuda()
+# x_normalizer
+# y_normalizer
 train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_x, train_x_grid, train_y,train_y_grid), 
                                                                             batch_size=batch_size, shuffle=True) 
 
@@ -117,8 +117,8 @@ test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x,
 ################################################################
 # training and evaluation
 ################################################################
-model = FNO2d(modes, modes, width, in_channels=in_channels, out_channels=out_channels, is_mesh=False, s1=args.res1d, s2=args.res1d).cuda()
-model_iphi = IPHI().cuda()
+model = FNO2d(modes, modes, width, in_channels=in_channels, out_channels=out_channels, is_mesh=False, s1=args.res1d, s2=args.res1d)
+model_iphi = IPHI()
 print(count_params(model), count_params(model_iphi))
 
 optimizer_fno = Adam(model.parameters(), lr=learning_rate_fno, weight_decay=1e-4)
@@ -134,8 +134,8 @@ for ep in range(epochs):
     train_reg = 0
 
     for x, x_grid, y, y_grid in train_loader:
-        # rr, sigma, mesh = rr.cuda(), sigma.cuda(), mesh.cuda() ### feature thing, y, mesh
-        x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
+        # rr, sigma, mesh = rr, sigma, mesh ### feature thing, y, mesh
+        x, x_grid, y, y_grid = x, x_grid, y, y_grid
 
         optimizer_fno.zero_grad()
         optimizer_iphi.zero_grad() 
@@ -144,7 +144,7 @@ for ep in range(epochs):
         y_normalizer.decode(out)
         loss = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
         loss.backward()
-        # print(loss)
+        print(loss)
         optimizer_fno.step()
         optimizer_iphi.step()
         train_l2 += loss.item()
@@ -156,9 +156,9 @@ for ep in range(epochs):
     test_l2 = 0.0
     with torch.no_grad():
         for x, x_grid, y, y_grid in test_loader:
-            x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
+            x, x_grid, y, y_grid = x, x_grid, y, y_grid
             # print(rr.shape, sigma.shape, mesh.shape) ## 20,42 ; 20, 972, 1 ; 20, 972, 2
-            # rr, sigma, mesh = rr.cuda(), sigma.cuda(), mesh.cuda()
+            # rr, sigma, mesh = rr, sigma, mesh
             inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
             out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) ### self, u, code=None, x_in=None, x_out=None, iphi=None
             test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
