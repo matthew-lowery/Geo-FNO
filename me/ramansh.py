@@ -63,11 +63,11 @@ x_grid = data['x_grid']
 train_x, test_x, train_y, test_y = data['x_train'], data['x_test'], data['y_train'], data['y_test']
 train_x, train_y = train_x[:ntrain], train_y[:ntrain]
 
+### norm rect domain to [0,1]^2
 if args.norm_grid:
     x_grid_min, x_grid_max = np.min(x_grid, axis=0, keepdims=True), np.max(x_grid, axis=0, keepdims=True)
     x_grid = (x_grid - x_grid_min) / (x_grid_max-x_grid_min)
-y_grid = x_grid
-    
+
 x_grid = np.repeat(x_grid[None], ntrain+ntest, axis=0)
 y_grid = x_grid
 
@@ -82,6 +82,11 @@ train_x, test_x, x_grid, y_grid, train_y, test_y = torch.tensor(train_x, dtype=t
 
 train_x_grid, train_y_grid = x_grid[:ntrain], y_grid[:ntrain]
 test_x_grid, test_y_grid = x_grid[-ntest:], y_grid[-ntest:]
+
+print(f'{train_x.shape=}, {test_x.shape=}, \n \
+        {train_x_grid.shape=}, {test_x_grid.shape=},\n \
+        {train_y.shape=}, {test_y.shape=},\n \
+        {train_y_grid.shape=}, {test_y_grid.shape=} ')
 
 x_normalizer = UnitGaussianNormalizer(train_x)
 
@@ -111,7 +116,6 @@ optimizer_iphi = Adam(model_iphi.parameters(), lr=learning_rate_iphi, weight_dec
 scheduler_iphi = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_iphi, T_max = epochs)
 
 myloss = LpLoss(size_average=False)
-N_sample = 1000
 for ep in range(epochs):
     model.train()
     t1 = default_timer()
@@ -129,7 +133,7 @@ for ep in range(epochs):
         y_normalizer.decode(out)
         loss = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
         loss.backward()
-
+        # print(loss)
         optimizer_fno.step()
         optimizer_iphi.step()
         train_l2 += loss.item()
@@ -152,4 +156,4 @@ for ep in range(epochs):
     test_l2 /= ntest
 
     t2 = default_timer()
-    print(ep, t2 - t1, train_l2, test_l2)
+    print(ep, t2 - t1, train_l2, f'{test_l2=}')
