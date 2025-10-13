@@ -33,7 +33,7 @@ parser.add_argument('--ntrain', type=int, default=1_000)
 parser.add_argument('--npoints', type=str, default='all')
 parser.add_argument('--epochs', type=int, default=1_000)
 parser.add_argument('--norm-grid', action='store_true')
-parser.add_argument('--batch-size', type=int, default=20)
+parser.add_argument('--batch-size', type=int, default=50)
 parser.add_argument('--wandb', action='store_true')
 parser.add_argument('--dataset', type=str, default='backward_facing_step', choices=['backward_facing_step', 
                                                                                     'buoyancy_cavity_flow', 
@@ -180,7 +180,7 @@ for ep in range(epochs):
     test_l2 = 0.0
     with torch.no_grad():
         for x, x_grid, y, y_grid in test_loader:
-            x, x_grid, y, y_grid = x, x_grid, y, y_grid
+            x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
             # print(rr.shape, sigma.shape, mesh.shape) ## 20,42 ; 20, 972, 1 ; 20, 972, 2
             # rr, sigma, mesh = rr, sigma, mesh
             inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
