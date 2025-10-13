@@ -7,7 +7,7 @@ from utilities3 import *
 from Adam import Adam
 import numpy as np
 import os, copy
-from model_cpu import FNO2d, IPHI
+from model import FNO2d, IPHI
 import wandb
 
 def set_seed(seed):    
