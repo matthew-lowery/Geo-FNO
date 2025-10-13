@@ -6,14 +6,14 @@ sys.path.append('..')
 from utilities3 import *
 from Adam import Adam
 import numpy as np
-import os
+import os, copy
 from model_cpu import FNO2d, IPHI
 import wandb
 
 def set_seed(seed):    
     torch.manual_seed(seed)
     np.random.seed(seed)
-    torch.cuda.manual_seed(seed)
+    # torch.cuda.manual_seed(seed)
 
 torch.backends.cudnn.deterministic = True
 
@@ -30,7 +30,7 @@ parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--lr-phi', type=float, default=1e-4)
 parser.add_argument('--lr-fno', type=float, default=1e-3)
 parser.add_argument('--ntrain', type=int, default=1_000)
-parser.add_argument('--npoints', type=str, default='')
+parser.add_argument('--npoints', type=str, default='all')
 parser.add_argument('--epochs', type=int, default=1_000)
 parser.add_argument('--norm-grid', action='store_true')
 parser.add_argument('--batch-size', type=int, default=20)
@@ -60,14 +60,12 @@ learning_rate_fno = args.lr_fno
 learning_rate_iphi = args.lr_phi
 
 epochs = args.epochs
-ntrain,ntest = args.ntrain, 200
-### num freqs, modes, width, latent resolution
+ntrain,ntest = args.ntrain, 200 ### ntest is always 200 for ram's problems
 
 modes = args.modes
 width = args.width
 
 ########## load data ########################################################################
-
 data = np.load(f'./data/{args.dataset}.npz')
 
 x_grid = data['x_grid']
@@ -79,13 +77,16 @@ if args.norm_grid:
     x_grid_min, x_grid_max = np.min(x_grid, axis=0, keepdims=True), np.max(x_grid, axis=0, keepdims=True)
     x_grid = (x_grid- x_grid_min) / (x_grid_max - x_grid_min)
 
+### in dimensions and out dimensions
 in_channels = train_x.shape[-1] + x_grid.shape[-1]
 out_channels = train_y.shape[-1]
 
 ########################################################################################
-### if we subsample, we need to adjust the normalizers, which is ugly 
+### Here we are subsampling points in the training functions, but not in the test functions, which means our pointwise normalizer,
+### made from the training functions, and used on both training+test functions, must be amenable to both the subsampled grid and the full grid. 
+### So we just make a normalizer for both.
 
-if args.npoints != '':
+if args.npoints != 'all':
     def subsample_points(arr, d):
         t = arr.shape[0] // d
         kept_indices = np.arange(arr.shape[0])[::t]
@@ -95,11 +96,12 @@ if args.npoints != '':
         final_kept_indices = np.setdiff1d(kept_indices, removed_from_kept)
         r = arr[final_kept_indices]
         return r, final_kept_indices
-
     _, subsample_idx = subsample_points(x_grid, int(args.npoints))
 else:
+    ### full grid indices
     subsample_idx = np.arange(len(x_grid))
 
+### move to torch as the normalizers are written in torch and everything subsequently also
 train_x = torch.tensor(train_x, dtype=torch.float32)
 test_x =  torch.tensor(test_x, dtype=torch.float32)
 train_y = torch.tensor(train_y, dtype=torch.float32)
@@ -108,22 +110,22 @@ x_grid = torch.tensor(x_grid, dtype=torch.float32)
 subsample_idx = torch.tensor(subsample_idx, dtype=torch.int32)
 
 x_normalizer = UnitGaussianNormalizer(train_x)
-y_normalizer = UnitGaussianNormalizer(train_y)
-
 train_x = x_normalizer.encode(train_x)
 test_x = x_normalizer.encode(test_x)
 
-import copy
+### each normalizer based on train, but each used on the model's predicted train/test output functions
+y_normalizer = UnitGaussianNormalizer(train_y)
 y_normalizer_train = copy.deepcopy(y_normalizer)
 y_normalizer_train.mean = y_normalizer_train.mean[subsample_idx]
 y_normalizer_train.std = y_normalizer_train.std[subsample_idx]
 
 y_normalizer.cuda()
+y_normalizer_train.cuda()
 
+### subsampling the training functions now
 train_x = train_x[:, subsample_idx]
 train_x_grid = x_grid[subsample_idx]
 train_x_grid = train_x_grid.unsqueeze(0).repeat(ntrain, *([1] * x_grid.ndim))
-
 train_y =  train_y[:, subsample_idx]
 
 test_x_grid = x_grid.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
@@ -139,6 +141,7 @@ test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x,
 ################################################################
 # training and evaluation
 ################################################################
+
 model = FNO2d(modes, modes, width, in_channels=in_channels, out_channels=out_channels, is_mesh=False, s1=args.res1d, s2=args.res1d).cuda()
 model_iphi = IPHI().cuda()
 print(count_params(model), count_params(model_iphi))
@@ -165,6 +168,7 @@ for ep in range(epochs):
         out = y_normalizer_train.decode(out)
         loss = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
         loss.backward()
+        # print(loss)
         optimizer_fno.step()
         optimizer_iphi.step()
         train_l2 += loss.item()
@@ -176,7 +180,9 @@ for ep in range(epochs):
     test_l2 = 0.0
     with torch.no_grad():
         for x, x_grid, y, y_grid in test_loader:
-            x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
+            x, x_grid, y, y_grid = x, x_grid, y, y_grid
+            # print(rr.shape, sigma.shape, mesh.shape) ## 20,42 ; 20, 972, 1 ; 20, 972, 2
+            # rr, sigma, mesh = rr, sigma, mesh
             inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
             out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) ### self, u, code=None, x_in=None, x_out=None, iphi=None
             out = y_normalizer.decode(out)
