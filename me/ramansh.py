@@ -9,6 +9,7 @@ import numpy as np
 import os, copy
 from model import FNO2d, IPHI
 import wandb
+# from rbf_fd import calc_div
 
 def set_seed(seed):    
     torch.manual_seed(seed)
