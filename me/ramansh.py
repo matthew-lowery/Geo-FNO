@@ -14,7 +14,7 @@ import wandb
 def set_seed(seed):    
     torch.manual_seed(seed)
     np.random.seed(seed)
-    # torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
 
 torch.backends.cudnn.deterministic = True
 
@@ -169,7 +169,6 @@ for ep in range(epochs):
         out = y_normalizer_train.decode(out)
         loss = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
         loss.backward()
-        # print(loss)
         optimizer_fno.step()
         optimizer_iphi.step()
         train_l2 += loss.item()
@@ -182,11 +181,12 @@ for ep in range(epochs):
     with torch.no_grad():
         for x, x_grid, y, y_grid in test_loader:
             x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
-            # print(rr.shape, sigma.shape, mesh.shape) ## 20,42 ; 20, 972, 1 ; 20, 972, 2
-            # rr, sigma, mesh = rr, sigma, mesh
             inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
             out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) ### self, u, code=None, x_in=None, x_out=None, iphi=None
             out = y_normalizer.decode(out)
+            print(out.shape)
+            out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
+            y = torch.linalg.norm(y, dim=-1)
             test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
 
     train_l2 /= ntrain
