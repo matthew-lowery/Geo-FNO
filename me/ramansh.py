@@ -167,6 +167,8 @@ for ep in range(epochs):
         inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
         out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi)
         out = y_normalizer_train.decode(out)
+        out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
+        y = torch.linalg.norm(y, dim=-1)
         loss = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
         loss.backward()
         optimizer_fno.step()
@@ -184,7 +186,6 @@ for ep in range(epochs):
             inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
             out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) ### self, u, code=None, x_in=None, x_out=None, iphi=None
             out = y_normalizer.decode(out)
-            print(out.shape)
             out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
             y = torch.linalg.norm(y, dim=-1)
             test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
@@ -194,4 +195,4 @@ for ep in range(epochs):
 
     t2 = default_timer()
     print(ep, t2 - t1, train_l2, f'{test_l2=}')
-    wandb.log({"test_loss": test_l2}, step=ep)
+    wandb.log({"train_loss": train_l2, "test_loss": test_l2}, step=ep)
