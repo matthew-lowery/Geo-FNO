@@ -35,6 +35,8 @@ parser.add_argument('--epochs', type=int, default=1_000)
 parser.add_argument('--norm-grid', action='store_true')
 parser.add_argument('--batch-size', type=int, default=20)
 parser.add_argument('--wandb', action='store_true')
+parser.add_argument('--calc-div', action='store_true')
+parser.add_argument('--calc-div-every', type=int, default=100)
 parser.add_argument('--dataset', type=str, default='backward_facing_step', choices=['backward_facing_step', 
                                                                                     'buoyancy_cavity_flow', 
                                                                                     'flow_cylinder_laminar', 
@@ -191,3 +193,6 @@ for ep in range(epochs):
     t2 = default_timer()
     print(ep, t2 - t1, train_l2, f'{test_l2=}')
     wandb.log({"test_loss": test_l2}, step=ep)
+
+    if ep % args.calc_div_every == 0:
+        pass ###

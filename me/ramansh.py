@@ -9,6 +9,7 @@ import numpy as np
 import os, copy
 from model import FNO2d, IPHI
 import wandb
+import time
 # from rbf_fd import calc_div
 
 def set_seed(seed):    
@@ -36,6 +37,8 @@ parser.add_argument('--epochs', type=int, default=1_000)
 parser.add_argument('--norm-grid', action='store_true')
 parser.add_argument('--batch-size', type=int, default=50)
 parser.add_argument('--wandb', action='store_true')
+parser.add_argument('--calc-div', action='store_true')
+parser.add_argument('--calc-div-every', type=int, default=100)
 parser.add_argument('--dataset', type=str, default='backward_facing_step', choices=['backward_facing_step', 
                                                                                     'buoyancy_cavity_flow', 
                                                                                     'flow_cylinder_laminar', 
@@ -44,7 +47,6 @@ parser.add_argument('--dataset', type=str, default='backward_facing_step', choic
                                                                                     'merge_vortices', 
                                                                                     'taylor_green_exact', 
                                                                                     'taylor_green_numerical'])
-
 
 args = parser.parse_args()
 print(args)
@@ -111,23 +113,31 @@ x_grid = torch.tensor(x_grid, dtype=torch.float32)
 subsample_idx = torch.tensor(subsample_idx, dtype=torch.int32)
 
 x_normalizer = UnitGaussianNormalizer(train_x)
-train_x = x_normalizer.encode(train_x)
+train_x = x_normalizer.encode(train_x) ### normalize x before subsampling
 test_x = x_normalizer.encode(test_x)
 
 ### each normalizer based on train, but each used on the model's predicted train/test output functions
 y_normalizer = UnitGaussianNormalizer(train_y)
-y_normalizer_train = copy.deepcopy(y_normalizer)
-y_normalizer_train.mean = y_normalizer_train.mean[subsample_idx]
-y_normalizer_train.std = y_normalizer_train.std[subsample_idx]
+y_normalizer_sub = copy.deepcopy(y_normalizer)
+y_normalizer_sub.mean = y_normalizer_sub.mean[subsample_idx]
+y_normalizer_sub.std = y_normalizer_sub.std[subsample_idx]
 
 y_normalizer.cuda()
-y_normalizer_train.cuda()
+y_normalizer_sub.cuda() ### sub
 
 ### subsampling the training functions now
 train_x = train_x[:, subsample_idx]
 train_x_grid = x_grid[subsample_idx]
 train_x_grid = train_x_grid.unsqueeze(0).repeat(ntrain, *([1] * x_grid.ndim))
 train_y =  train_y[:, subsample_idx]
+
+
+### subsampling the testing functions now
+test_x_sub = test_x[:, subsample_idx]
+test_x_grid_sub = x_grid[subsample_idx]
+test_x_grid_sub = test_x_grid_sub.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
+test_y_sub =  test_y[:, subsample_idx]
+
 
 test_x_grid = x_grid.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
 
@@ -138,6 +148,9 @@ train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_
 
 test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x, test_x_grid, test_y, test_x_grid), 
                                             batch_size=batch_size, shuffle=False) 
+
+test_loader_sub = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x_sub, test_x_grid_sub, test_y_sub, test_x_grid_sub),
+                                              batch_size=batch_size, shuffle=False) 
 
 ################################################################
 # training and evaluation
@@ -153,9 +166,10 @@ optimizer_iphi = Adam(model_iphi.parameters(), lr=learning_rate_iphi, weight_dec
 scheduler_iphi = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_iphi, T_max = epochs)
 
 myloss = LpLoss(size_average=False)
+
+t1 = time.perf_counter()
 for ep in range(epochs):
     model.train()
-    t1 = default_timer()
     train_l2 = 0
     train_reg = 0
 
@@ -166,7 +180,7 @@ for ep in range(epochs):
         optimizer_iphi.zero_grad() 
         inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
         out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi)
-        out = y_normalizer_train.decode(out)
+        out = y_normalizer_sub.decode(out)
         loss = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
         loss.backward()
         optimizer_fno.step()
@@ -178,20 +192,42 @@ for ep in range(epochs):
 
     model.eval()
     test_l2 = 0.0
+   
+    eval_t1 = time.perf_counter()
     with torch.no_grad():
         for x, x_grid, y, y_grid in test_loader:
             x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
             inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
-            out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) ### self, u, code=None, x_in=None, x_out=None, iphi=None
+            out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
             out = y_normalizer.decode(out)
-            print(out.shape)
             out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
             y = torch.linalg.norm(y, dim=-1)
             test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
+    eval_t2 = time.perf_counter()
+
+    test_l2_sub = 0.0
+    eval_t1_sub = time.perf_counter()
+    with torch.no_grad():
+        for x, x_grid, y, y_grid in test_loader_sub:
+            x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
+            inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
+            out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
+            out = y_normalizer_sub.decode(out)
+            out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
+            y = torch.linalg.norm(y, dim=-1)
+            test_l2_sub += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
+    eval_t2_sub = time.perf_counter()
 
     train_l2 /= ntrain
     test_l2 /= ntest
+    test_l2_sub /= ntest
 
-    t2 = default_timer()
-    print(ep, t2 - t1, train_l2, f'{test_l2=}')
-    wandb.log({"test_loss": test_l2}, step=ep)
+    print(ep, 'eval_time:', eval_t2-eval_t1, f'{train_l2=}', f'{test_l2=}', f'{test_l2_sub=}')
+    wandb.log({"train_loss": train_l2, "test_loss": test_l2, "test_loss_sub": test_l2_sub, "eval_time": eval_t2 - eval_t1}, step=ep)
+
+    if ep % args.calc_div_every == 0:
+        pass ##
+
+t2 = time.perf_counter()
+wandb.log({"total_train_time": t2-t1}, step=ep)
+print('total_train_time', t2-t1)
