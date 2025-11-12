@@ -10,7 +10,7 @@ import os, copy
 from model import FNO2d, IPHI
 import wandb
 import time
-# from rbf_fd import calc_div
+from calc_div_local_wls_poly import calc_div
 
 def set_seed(seed):    
     torch.manual_seed(seed)
@@ -37,8 +37,10 @@ parser.add_argument('--epochs', type=int, default=1_000)
 parser.add_argument('--norm-grid', action='store_true')
 parser.add_argument('--batch-size', type=int, default=50)
 parser.add_argument('--wandb', action='store_true')
+parser.add_argument('--save', action='store_true')
 parser.add_argument('--calc-div', action='store_true')
-parser.add_argument('--calc-div-every', type=int, default=100)
+parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
+parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
 parser.add_argument('--dataset', type=str, default='backward_facing_step', choices=['backward_facing_step', 
                                                                                     'buoyancy_cavity_flow', 
                                                                                     'flow_cylinder_laminar', 
@@ -46,11 +48,15 @@ parser.add_argument('--dataset', type=str, default='backward_facing_step', choic
                                                                                     'lid_cavity_flow', 
                                                                                     'merge_vortices', 
                                                                                     'taylor_green_exact', 
-                                                                                    'taylor_green_numerical'])
+                                                                                    'taylor_green_numerical',
+                                                                                    "merge_vortices_easier",
+                                                                                    "backward_facing_step_ood"
+                                                                                    ])
+
 
 args = parser.parse_args()
 print(args)
-
+name = "{args.dataset}_{args.seed}_{args.ntrain}_{args.npoints}"
 if not args.wandb:
     os.environ["WANDB_MODE"] = "disabled"
 wandb.login(key='d612cda26a5690e196d092756d668fc2aee8525b')
@@ -116,34 +122,21 @@ x_normalizer = UnitGaussianNormalizer(train_x)
 train_x = x_normalizer.encode(train_x) ### normalize x before subsampling
 test_x = x_normalizer.encode(test_x)
 
-### each normalizer based on train, but each used on the model's predicted train/test output functions
-y_normalizer = UnitGaussianNormalizer(train_y)
-y_normalizer_sub = copy.deepcopy(y_normalizer)
-y_normalizer_sub.mean = y_normalizer_sub.mean[subsample_idx]
-y_normalizer_sub.std = y_normalizer_sub.std[subsample_idx]
+### training functions setup
+train_x_sub = train_x[:, subsample_idx]
+x_grid_sub = x_grid[subsample_idx]
+train_x_grid_sub = x_grid_sub.unsqueeze(0).repeat(ntrain, *([1] * x_grid.ndim))
+train_y_sub = train_y[:, subsample_idx]
 
-y_normalizer.cuda()
-y_normalizer_sub.cuda() ### sub
-
-### subsampling the training functions now
-train_x = train_x[:, subsample_idx]
-train_x_grid = x_grid[subsample_idx]
-train_x_grid = train_x_grid.unsqueeze(0).repeat(ntrain, *([1] * x_grid.ndim))
-train_y =  train_y[:, subsample_idx]
-
-
-### subsampling the testing functions now
+### testing functions setup
 test_x_sub = test_x[:, subsample_idx]
-test_x_grid_sub = x_grid[subsample_idx]
-test_x_grid_sub = test_x_grid_sub.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
+test_x_grid_sub = x_grid_sub.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
 test_y_sub =  test_y[:, subsample_idx]
-
-
 test_x_grid = x_grid.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
 
 print(f'{train_x.shape=}, {train_x_grid.shape=}, {train_y.shape=}, {test_x.shape=}, {test_y.shape=}, {test_x_grid.shape=}')
 
-train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_x, train_x_grid, train_y, train_x_grid), 
+train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_x_sub, train_x_grid_sub, train_y_sub, train_x_grid_sub), 
                                                                             batch_size=batch_size, shuffle=True) 
 
 test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x, test_x_grid, test_y, test_x_grid), 
@@ -151,6 +144,12 @@ test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x,
 
 test_loader_sub = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x_sub, test_x_grid_sub, test_y_sub, test_x_grid_sub),
                                               batch_size=batch_size, shuffle=False) 
+
+### each normalizer based on train, but each used on the model's predicted train/test output functions
+y_normalizer = UnitGaussianNormalizer(train_y)
+y_normalizer_sub = UnitGaussianNormalizer(train_y_sub)
+y_normalizer.cuda(); y_normalizer_sub.cuda()
+
 
 ################################################################
 # training and evaluation
@@ -225,9 +224,36 @@ for ep in range(epochs):
     print(ep, 'eval_time:', eval_t2-eval_t1, f'{train_l2=}', f'{test_l2=}', f'{test_l2_sub=}')
     wandb.log({"train_loss": train_l2, "test_loss": test_l2, "test_loss_sub": test_l2_sub, "eval_time": eval_t2 - eval_t1}, step=ep)
 
-    if ep % args.calc_div_every == 0:
-        pass ##
 
 t2 = time.perf_counter()
 wandb.log({"total_train_time": t2-t1}, step=ep)
 print('total_train_time', t2-t1)
+
+### collect model output for divergence calculation
+if args.calc_div:
+    y_preds_test = []
+    for x, x_grid, y, y_grid in test_loader_sub:
+        x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
+        inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
+        out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
+        out = y_normalizer_sub.decode(out)
+        y_preds_test.append(out)
+    y_preds_test = torch.stack(y_preds_test)
+
+    ### divergence calculation in jax and saving
+    import jax; import jax.numpy as jnp
+    y_preds_test_jnp = jnp.asarray(y_preds_test)
+    x_grid_jnp = jnp.asarray(x_grid)
+    divs = jax.vmap(calc_div, in_axes=(0, None))(y_preds_test_jnp, x_grid_jnp)
+
+    os.makedirs(args.div_folder, exist_ok=True)
+    jnp.save(os.path.join(args.div_folder, name), divs)
+
+### saving model for later use
+os.makedirs(args.model_folder, exist_ok=True)
+if args.save:
+    torch.save({
+    "model_state_dict": model.state_dict(),
+    }, os.path.join(args.model_folder, name)
+
+
