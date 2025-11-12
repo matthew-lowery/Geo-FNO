@@ -56,7 +56,7 @@ parser.add_argument('--dataset', type=str, default='backward_facing_step', choic
 
 args = parser.parse_args()
 print(args)
-name = "{args.dataset}_{args.seed}_{args.ntrain}_{args.npoints}"
+name = f"{args.dataset}_{args.seed}_{args.ntrain}_{args.npoints}"
 if not args.wandb:
     os.environ["WANDB_MODE"] = "disabled"
 wandb.login(key='d612cda26a5690e196d092756d668fc2aee8525b')
@@ -134,7 +134,7 @@ test_x_grid_sub = x_grid_sub.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
 test_y_sub =  test_y[:, subsample_idx]
 test_x_grid = x_grid.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
 
-print(f'{train_x.shape=}, {train_x_grid.shape=}, {train_y.shape=}, {test_x.shape=}, {test_y.shape=}, {test_x_grid.shape=}')
+print(f'{train_x_sub.shape=}, {train_x_grid_sub.shape=}, {train_y_sub.shape=}, {test_x.shape=}, {test_y.shape=}, {test_x_grid.shape=}')
 
 train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_x_sub, train_x_grid_sub, train_y_sub, train_x_grid_sub), 
                                                                             batch_size=batch_size, shuffle=True) 
@@ -232,28 +232,30 @@ print('total_train_time', t2-t1)
 ### collect model output for divergence calculation
 if args.calc_div:
     y_preds_test = []
-    for x, x_grid, y, y_grid in test_loader_sub:
-        x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
-        inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
-        out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
-        out = y_normalizer_sub.decode(out)
-        y_preds_test.append(out)
-    y_preds_test = torch.stack(y_preds_test)
-
+    
+    with torch.no_grad():
+        for x, x_grid, y, y_grid in test_loader_sub:
+            x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
+            inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
+            out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
+            out = y_normalizer_sub.decode(out)
+            y_preds_test.append(out)
+    y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, 2)
     ### divergence calculation in jax and saving
     import jax; import jax.numpy as jnp
-    y_preds_test_jnp = jnp.asarray(y_preds_test)
-    x_grid_jnp = jnp.asarray(x_grid)
+    y_preds_test_jnp = jnp.asarray(y_preds_test, dtype=jnp.float64)
+    x_grid_jnp = jnp.asarray(data['x_grid'][subsample_idx], dtype=jnp.float64) ### use the original f64 points, might as well
+    torch.cuda.empty_cache()
     divs = jax.vmap(calc_div, in_axes=(0, None))(y_preds_test_jnp, x_grid_jnp)
-
+    print(f'{jnp.max(jnp.abs(divs))=}, {jnp.mean(divs)=}')
     os.makedirs(args.div_folder, exist_ok=True)
     jnp.save(os.path.join(args.div_folder, name), divs)
 
 ### saving model for later use
-os.makedirs(args.model_folder, exist_ok=True)
 if args.save:
+    os.makedirs(args.model_folder, exist_ok=True)
     torch.save({
     "model_state_dict": model.state_dict(),
-    }, os.path.join(args.model_folder, name)
+    }, os.path.join(args.model_folder, f'{name}.torch'))
 
 
