@@ -11,6 +11,7 @@ from model import FNO2d, IPHI
 import wandb
 import time
 from calc_div_local_wls_poly import calc_div
+import scipy
 
 def set_seed(seed):    
     torch.manual_seed(seed)
@@ -241,15 +242,17 @@ if args.calc_div:
             out = y_normalizer_sub.decode(out)
             y_preds_test.append(out)
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, 2)
+    
     ### divergence calculation in jax and saving
-    import jax; import jax.numpy as jnp
-    y_preds_test_jnp = jnp.asarray(y_preds_test, dtype=jnp.float64)
-    x_grid_jnp = jnp.asarray(data['x_grid'][subsample_idx], dtype=jnp.float64) ### use the original f64 points, might as well
-    torch.cuda.empty_cache()
-    divs = jax.vmap(calc_div, in_axes=(0, None))(y_preds_test_jnp, x_grid_jnp)
-    print(f'{jnp.max(jnp.abs(divs))=}, {jnp.mean(divs)=}')
-    os.makedirs(args.div_folder, exist_ok=True)
-    jnp.save(os.path.join(args.div_folder, name), divs)
+#     import jax; import jax.numpy as jnp
+#     y_preds_test_jnp = jnp.asarray(y_preds_test, dtype=jnp.float64)
+#     x_grid_jnp = jnp.asarray(data['x_grid'][subsample_idx], dtype=jnp.float64) ### use the original f64 points, might as well
+#     torch.cuda.empty_cache()
+#     divs = jax.vmap(calc_div, in_axes=(0, None))(y_preds_test_jnp, x_grid_jnp)
+#     print(f'{jnp.max(jnp.abs(divs))=}, {jnp.mean(divs)=}')
+#     os.makedirs(args.div_folder, exist_ok=True)
+#     jnp.save(os.path.join(args.div_folder, name), divs)
+# 
 
 ### saving model for later use
 if args.save:
@@ -258,4 +261,8 @@ if args.save:
     "model_state_dict": model.state_dict(),
     }, os.path.join(args.model_folder, f'{name}.torch'))
 
+    ### saving test output functions for div calc 
+    os.makedirs(args.div_folder, exist_ok=True)
+    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': data['x_grid'],
+                                                           'y_preds_test': y_preds_test.cpu().numpy().astype(np.float64)})
 
