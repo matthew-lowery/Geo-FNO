@@ -10,7 +10,7 @@ import os, copy
 from model import FNO2d, IPHI
 import wandb
 import time
-from calc_div_local_wls_poly import calc_div
+#from calc_div_local_wls_poly import calc_div
 import scipy
 
 def set_seed(seed):    
@@ -34,9 +34,9 @@ parser.add_argument('--lr-phi', type=float, default=1e-4)
 parser.add_argument('--lr-fno', type=float, default=1e-3)
 parser.add_argument('--ntrain', type=int, default=1_000)
 parser.add_argument('--npoints', type=str, default='all')
-parser.add_argument('--epochs', type=int, default=1_000)
+parser.add_argument('--epochs', type=int, default=500)
 parser.add_argument('--norm-grid', action='store_true')
-parser.add_argument('--batch-size', type=int, default=50)
+parser.add_argument('--batch-size', type=int, default=20)
 parser.add_argument('--wandb', action='store_true')
 parser.add_argument('--save', action='store_true')
 parser.add_argument('--calc-div', action='store_true')
@@ -61,7 +61,7 @@ name = f"{args.dataset}_{args.seed}_{args.ntrain}_{args.npoints}"
 if not args.wandb:
     os.environ["WANDB_MODE"] = "disabled"
 wandb.login(key='d612cda26a5690e196d092756d668fc2aee8525b')
-wandb.init(project=args.dataset)
+wandb.init(project='ramansh', name=f'{name}')
 wandb.config.update(args)
 
 set_seed(args.seed)
@@ -76,10 +76,13 @@ modes = args.modes
 width = args.width
 
 ########## load data ########################################################################
-data = np.load(f'./data/{args.dataset}.npz')
+data = np.load(f'/projects/bfel/mlowery/geo-fno/{args.dataset}.npz')
 
 x_grid = data['x_grid']
 train_x, test_x, train_y, test_y = data['x_train'], data['x_test'], data['y_train'], data['y_test']
+if train_x.ndim == 2: train_x = train_x[...,None]
+if test_x.ndim == 2: test_x = test_x[...,None]
+
 train_x, train_y = train_x[:ntrain], train_y[:ntrain]
 
 ### norm rect domain to [0,1]^2
@@ -148,7 +151,10 @@ test_loader_sub = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(tes
 
 ### each normalizer based on train, but each used on the model's predicted train/test output functions
 y_normalizer = UnitGaussianNormalizer(train_y)
-y_normalizer_sub = UnitGaussianNormalizer(train_y_sub)
+#y_normalizer_sub = UnitGaussianNormalizer(train_y_sub)
+y_normalizer_sub = copy.deepcopy(y_normalizer)
+y_normalizer_sub.mean = y_normalizer_sub.mean[subsample_idx]
+y_normalizer_sub.std = y_normalizer_sub.std[subsample_idx]
 y_normalizer.cuda(); y_normalizer_sub.cuda()
 
 
@@ -171,8 +177,7 @@ t1 = time.perf_counter()
 for ep in range(epochs):
     model.train()
     train_l2 = 0
-    train_reg = 0
-
+    train_t1 = time.perf_counter()
     for x, x_grid, y, y_grid in train_loader:
         x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
 
@@ -186,44 +191,47 @@ for ep in range(epochs):
         optimizer_fno.step()
         optimizer_iphi.step()
         train_l2 += loss.item()
+    train_t2 = time.perf_counter() 
 
     scheduler_fno.step()
     scheduler_iphi.step()
-
-    model.eval()
-    test_l2 = 0.0
-   
-    eval_t1 = time.perf_counter()
-    with torch.no_grad():
-        for x, x_grid, y, y_grid in test_loader:
-            x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
-            inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
-            out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
-            out = y_normalizer.decode(out)
-            out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
-            y = torch.linalg.norm(y, dim=-1)
-            test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
-    eval_t2 = time.perf_counter()
-
-    test_l2_sub = 0.0
-    eval_t1_sub = time.perf_counter()
-    with torch.no_grad():
-        for x, x_grid, y, y_grid in test_loader_sub:
-            x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
-            inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
-            out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
-            out = y_normalizer_sub.decode(out)
-            out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
-            y = torch.linalg.norm(y, dim=-1)
-            test_l2_sub += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
-    eval_t2_sub = time.perf_counter()
-
+     
     train_l2 /= ntrain
-    test_l2 /= ntest
-    test_l2_sub /= ntest
+    print(ep, 'train_time:', train_t2-train_t1, f'{train_l2=}')
+    wandb.log({"train_loss": train_l2, "train_time": train_t2-train_t1}, step=ep)
 
-    print(ep, 'eval_time:', eval_t2-eval_t1, f'{train_l2=}', f'{test_l2=}', f'{test_l2_sub=}')
-    wandb.log({"train_loss": train_l2, "test_loss": test_l2, "test_loss_sub": test_l2_sub, "eval_time": eval_t2 - eval_t1}, step=ep)
+### eval when training is over
+model.eval()
+test_l2 = 0.0
+eval_t1 = time.perf_counter()
+with torch.no_grad():
+    for x, x_grid, y, y_grid in test_loader:
+        x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
+        inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
+        out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
+        out = y_normalizer.decode(out)
+        out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
+        y = torch.linalg.norm(y, dim=-1)
+        test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
+eval_t2 = time.perf_counter()
+
+test_l2_sub = 0.0
+eval_t1_sub = time.perf_counter()
+with torch.no_grad():
+    for x, x_grid, y, y_grid in test_loader_sub:
+        x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
+        inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
+        out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
+        out = y_normalizer_sub.decode(out)
+        out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
+        y = torch.linalg.norm(y, dim=-1)
+        test_l2_sub += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
+eval_t2_sub = time.perf_counter()
+test_l2 /= ntest
+test_l2_sub /= ntest
+print(ep, 'eval_time:', eval_t2-eval_t1, 'eval_sub_time', eval_t2_sub-eval_t1_sub, f'{test_l2=}', f'{test_l2_sub=}')
+wandb.log({"test_loss": test_l2, "test_loss_sub": test_l2_sub, "eval_time": eval_t2 - eval_t1, "eval_sub_time":eval_t2_sub-eval_t1_sub,
+            }, step=ep)
 
 
 t2 = time.perf_counter()
@@ -263,6 +271,6 @@ if args.save:
 
     ### saving test output functions for div calc 
     os.makedirs(args.div_folder, exist_ok=True)
-    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': data['x_grid'],
+    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': data['x_grid'][subsample_idx.cpu().numpy()],
                                                            'y_preds_test': y_preds_test.cpu().numpy().astype(np.float64)})
 
