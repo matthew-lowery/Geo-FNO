@@ -227,7 +227,7 @@ class SpectralConv3d(nn.Module):
 # ---------------------------
 # 3D IPHI (coordinate warp): x -> xi
 # ---------------------------
-class IPHI3d(nn.Module):
+class IPHI(nn.Module):
     def __init__(self, width=32, code_dim=None, device='cuda'):
         super().__init__()
         self.width = width
@@ -389,101 +389,3 @@ class FNO3d(nn.Module):
             return u
 
 
-
-################################################################
-# configs
-################################################################
-import argparse
-parser = argparse.ArgumentParser()
-parser.add_argument('--modes', type=int, default=12)
-parser.add_argument('--res1d', type=int, default=40)
-parser.add_argument('--width', type=int, default=32)
-parser.add_argument('--seed', type=int, default=0)
-### num sin features
-args = parser.parse_args()
-print(args)
-set_seed(args.seed)
-batch_size = 100
-learning_rate_fno = 0.001
-learning_rate_iphi = 0.0001
-
-epochs = 10000
-
-### load data
-fp = './data/diffrec_3d.npz'
-data = np.load(fp)
-dataset = fp.split('/')[-1].split('.')[0]
-x, x_grid, y, y_grid = data["x"].astype(np.float32), data["x_grid"].astype(np.float32), data["y"].astype(np.float32), data["y_grid"].astype(np.float32)
-
-
-y = y.reshape(1200, -1, 1)
-x = x.reshape(1200, -1, 1)
-x_grid = np.repeat(x_grid[None], 1200, axis=0)
-y_grid = np.repeat(y_grid[None], 1200, axis=0)
-ntrain,ntest = 1000,200
-x,x_grid,y,y_grid = torch.tensor(x, dtype=torch.float32), torch.tensor(x_grid, dtype=torch.float32), torch.tensor(y, dtype=torch.float32), torch.tensor(y_grid, dtype=torch.float32)
-
-print(x.shape, y.shape, x_grid.shape, y_grid.shape)
-train_x, train_x_grid, train_y, train_y_grid = x[:ntrain], x_grid[:ntrain], y[:ntrain], y_grid[:ntrain]
-test_x, test_x_grid, test_y, test_y_grid = x[-ntest:], x_grid[-ntest:], y[-ntest:], y_grid[-ntest:]
-train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_x, train_x_grid, train_y,train_y_grid), 
-                                                                            batch_size=batch_size, shuffle=True) 
-
-test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x, test_x_grid, test_y,test_y_grid), 
-                                            batch_size=batch_size, shuffle=False) 
-
-################################################################
-# training and evaluation
-################################################################
-model = FNO3d(args.modes, args.width, in_channels=4, out_channels=1, is_mesh=False, s1=args.res1d, s2=args.res1d, s3=args.res1d).cuda()
-model_iphi = IPHI3d().cuda()
-print(count_params(model), count_params(model_iphi))
-
-optimizer_fno = Adam(model.parameters(), lr=learning_rate_fno, weight_decay=1e-3)
-scheduler_fno = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_fno, T_max = epochs)
-optimizer_iphi = Adam(model_iphi.parameters(), lr=learning_rate_iphi, weight_decay=1e-4)
-scheduler_iphi = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_iphi, T_max = epochs)
-
-myloss = LpLoss(size_average=False)
-N_sample = 1000
-for ep in range(epochs):
-    model.train()
-    t1 = default_timer()
-    train_l2 = 0
-    train_reg = 0
-
-    for x, x_grid, y, y_grid in train_loader:
-        # rr, sigma, mesh = rr.cuda(), sigma.cuda(), mesh.cuda() ### feature thing, y, mesh
-        x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
-
-        optimizer_fno.zero_grad()
-        optimizer_iphi.zero_grad() 
-        inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
-        out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) ### self, u, code=None, x_in=None, x_out=None, iphi=None
-
-        loss = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
-        loss.backward()
-
-        optimizer_fno.step()
-        optimizer_iphi.step()
-        train_l2 += loss.item()
-
-    scheduler_fno.step()
-    scheduler_iphi.step()
-
-    model.eval()
-    test_l2 = 0.0
-    with torch.no_grad():
-        for x, x_grid, y, y_grid in test_loader:
-            x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
-            # print(rr.shape, sigma.shape, mesh.shape) ## 20,42 ; 20, 972, 1 ; 20, 972, 2
-            # rr, sigma, mesh = rr.cuda(), sigma.cuda(), mesh.cuda()
-            inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
-            out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) ### self, u, code=None, x_in=None, x_out=None, iphi=None
-            test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
-
-    train_l2 /= ntrain
-    test_l2 /= ntest
-
-    t2 = default_timer()
-    print(ep, t2 - t1, train_l2, test_l2)

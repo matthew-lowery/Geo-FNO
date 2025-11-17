@@ -32,7 +32,7 @@ parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--lr-phi', type=float, default=1e-4)
 parser.add_argument('--lr-fno', type=float, default=1e-3)
 parser.add_argument('--ntrain', type=int, default=1_000)
-parser.add_argument('--npoints', type=str, default='all')
+parser.add_argument('--npoints', type=str, default='2700')
 parser.add_argument('--epochs', type=int, default=500)
 parser.add_argument('--norm-grid', action='store_true')
 parser.add_argument('--batch-size', type=int, default=20)
@@ -41,7 +41,7 @@ parser.add_argument('--save', action='store_true')
 parser.add_argument('--calc-div', action='store_true')
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
-parser.add_argument('--dataset', type=str, default='species_transport')
+parser.add_argument('--dataset', type=str, default='taylor_green_time')
                                                                       
 args = parser.parse_args()
 print(args)
@@ -65,9 +65,11 @@ width = args.width
 
 ########## load data ########################################################################
 data = np.load(f'/projects/bfel/mlowery/geo-fno/{args.dataset}.npz')
+#data = np.load(f'../../ram_dataset/geo-fno/{args.dataset}.npz')
 
 x_grid = data['x_grid']
 train_x, test_x, train_y, test_y = data['x_train'], data['x_test'], data['y_train'], data['y_test']
+
 if train_x.ndim == 2: train_x = train_x[...,None]
 if test_x.ndim == 2: test_x = test_x[...,None]
 
@@ -77,10 +79,6 @@ train_x, train_y = train_x[:ntrain], train_y[:ntrain]
 if args.norm_grid:
     x_grid_min, x_grid_max = np.min(x_grid, axis=0, keepdims=True), np.max(x_grid, axis=0, keepdims=True)
     x_grid = (x_grid- x_grid_min) / (x_grid_max - x_grid_min)
-
-### in dimensions and out dimensions
-in_channels = train_x.shape[-1] + x_grid.shape[-1]
-out_channels = train_y.shape[-1]
 
 ########################################################################################
 ### Here we are subsampling points in the training functions, but not in the test functions, which means our pointwise normalizer,
@@ -117,40 +115,53 @@ test_x = x_normalizer.encode(test_x)
 ### training functions setup
 train_x_sub = train_x[:, subsample_idx]
 x_grid_sub = x_grid[subsample_idx]
-train_x_grid_sub = x_grid_sub.unsqueeze(0).repeat(ntrain, *([1] * x_grid.ndim))
 train_y_sub = train_y[:, subsample_idx]
 
 ### testing functions setup
 test_x_sub = test_x[:, subsample_idx]
-test_x_grid_sub = x_grid_sub.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
 test_y_sub =  test_y[:, subsample_idx]
-test_x_grid = x_grid.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
 
-print(f'{train_x_sub.shape=}, {train_x_grid_sub.shape=}, {train_y_sub.shape=}, {test_x.shape=}, {test_y.shape=}, {test_x_grid.shape=}')
+if args.dataset == 'taylor_green_time':
+    y_grid_sub = x_grid_sub.unsqueeze(1).repeat(1, 4, 1)
+    t = torch.linspace(0., 1., 5)
+    t_out = t[1:].view(1, -1, 1).repeat(len(y_grid_sub), 1, 1)
+    y_grid_sub = torch.cat((y_grid_sub, t_out), dim=-1).reshape(-1, 3)
+    x_grid_sub = torch.cat((x_grid_sub, torch.zeros(len(x_grid_sub), 1, device=x_grid_sub.device)), dim=-1)
+    train_y_sub = train_y_sub.view(len(train_y_sub), -1, 2)
+    test_y_sub = test_y_sub.view(len(test_y_sub), -1, 2)
+else:
+    y_grid_sub = x_grid_sub
+train_x_grid_sub = x_grid_sub.unsqueeze(0).repeat(ntrain, *([1] * x_grid_sub.ndim))
+train_y_grid_sub = y_grid_sub.unsqueeze(0).repeat(ntrain, *([1] * y_grid_sub.ndim))
+test_x_grid_sub = x_grid_sub.unsqueeze(0).repeat(ntest, *([1] * x_grid_sub.ndim))
+test_y_grid_sub = y_grid_sub.unsqueeze(0).repeat(ntest, *([1] * y_grid_sub.ndim))
 
-train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_x_sub, train_x_grid_sub, train_y_sub, train_x_grid_sub), 
+#test_x_grid = x_grid.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
+print(f'{train_x_sub.shape=}, {train_x_grid_sub.shape=}, {train_y_sub.shape=}, {train_y_grid_sub.shape=}, {test_x_sub.shape=}, {test_y_sub.shape=}')
+
+train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_x_sub, train_x_grid_sub, train_y_sub, train_y_grid_sub), 
                                                                             batch_size=batch_size, shuffle=True) 
 
-test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x, test_x_grid, test_y, test_x_grid), 
-                                            batch_size=batch_size, shuffle=False) 
-
-test_loader_sub = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x_sub, test_x_grid_sub, test_y_sub, test_x_grid_sub),
+#test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x, test_x_grid, test_y, test_x_grid), 
+#                                            batch_size=batch_size, shuffle=False) 
+#
+test_loader_sub = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x_sub, test_x_grid_sub, test_y_sub, test_y_grid_sub),
                                               batch_size=batch_size, shuffle=False) 
 
 ### each normalizer based on train, but each used on the model's predicted train/test output functions
-y_normalizer = UnitGaussianNormalizer(train_y)
-#y_normalizer_sub = UnitGaussianNormalizer(train_y_sub)
-y_normalizer_sub = copy.deepcopy(y_normalizer)
-y_normalizer_sub.mean = y_normalizer_sub.mean[subsample_idx]
-y_normalizer_sub.std = y_normalizer_sub.std[subsample_idx]
-y_normalizer.cuda(); y_normalizer_sub.cuda()
+#y_normalizer = UnitGaussianNormalizer(train_y)
+y_normalizer_sub = UnitGaussianNormalizer(train_y_sub)
+y_normalizer_sub.cuda()
 
 
 ################################################################
 # training and evaluation
 ################################################################
+### in dimensions and out dimensions
+in_channels = train_x_sub.shape[-1] + x_grid_sub.shape[-1]
+out_channels = train_y_sub.shape[-1]
 
-model = FNO3d(modes, modes, width, in_channels=in_channels, out_channels=out_channels, is_mesh=False, s1=args.res1d, s2=args.res1d, s3=args.res1d).cuda()
+model = FNO3d(modes, width, in_channels=in_channels, out_channels=out_channels, is_mesh=False, s1=args.res1d, s2=args.res1d, s3=args.res1d).cuda()
 model_iphi = IPHI().cuda()
 print(count_params(model), count_params(model_iphi))
 
@@ -190,18 +201,18 @@ for ep in range(epochs):
 
 ### eval when training is over
 model.eval()
-test_l2 = 0.0
-eval_t1 = time.perf_counter()
-with torch.no_grad():
-    for x, x_grid, y, y_grid in test_loader:
-        x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
-        inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
-        out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
-        out = y_normalizer.decode(out)
-        out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
-        y = torch.linalg.norm(y, dim=-1)
-        test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
-eval_t2 = time.perf_counter()
+#test_l2 = 0.0
+#eval_t1 = time.perf_counter()
+#with torch.no_grad():
+#    for x, x_grid, y, y_grid in test_loader:
+#        x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
+#        inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
+#        out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
+#        out = y_normalizer.decode(out)
+#        out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
+#        y = torch.linalg.norm(y, dim=-1)
+#        test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
+#eval_t2 = time.perf_counter()
 
 test_l2_sub = 0.0
 eval_t1_sub = time.perf_counter()
@@ -215,12 +226,11 @@ with torch.no_grad():
         y = torch.linalg.norm(y, dim=-1)
         test_l2_sub += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
 eval_t2_sub = time.perf_counter()
-test_l2 /= ntest
+#test_l2 /= ntest
 test_l2_sub /= ntest
-print(ep, 'eval_time:', eval_t2-eval_t1, 'eval_sub_time', eval_t2_sub-eval_t1_sub, f'{test_l2=}', f'{test_l2_sub=}')
-wandb.log({"test_loss": test_l2, "test_loss_sub": test_l2_sub, "eval_time": eval_t2 - eval_t1, "eval_sub_time":eval_t2_sub-eval_t1_sub,
+print(ep, 'eval_sub_time', eval_t2_sub-eval_t1_sub, f'{test_l2_sub=}')
+wandb.log({"test_loss_sub": test_l2_sub, "eval_sub_time":eval_t2_sub-eval_t1_sub,
             }, step=ep)
-
 
 t2 = time.perf_counter()
 wandb.log({"total_train_time": t2-t1}, step=ep)
