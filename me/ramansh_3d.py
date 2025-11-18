@@ -64,8 +64,8 @@ modes = args.modes
 width = args.width
 
 ########## load data ########################################################################
-data = np.load(f'/projects/bfel/mlowery/geo-fno/{args.dataset}.npz')
-#data = np.load(f'../../ram_dataset/geo-fno/{args.dataset}.npz')
+#data = np.load(f'/projects/bfel/mlowery/geo-fno/{args.dataset}.npz')
+data = np.load(f'../../ram_dataset/geo-fno/{args.dataset}.npz')
 
 x_grid = data['x_grid']
 train_x, test_x, train_y, test_y = data['x_train'], data['x_test'], data['y_train'], data['y_test']
@@ -247,8 +247,7 @@ if args.calc_div:
             out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
             out = y_normalizer_sub.decode(out)
             y_preds_test.append(out)
-    y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, 3)
-    
+    y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, out.shape[-1])
     ### divergence calculation in jax and saving
 #     import jax; import jax.numpy as jnp
 #     y_preds_test_jnp = jnp.asarray(y_preds_test, dtype=jnp.float64)
