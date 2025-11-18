@@ -49,7 +49,7 @@ name = f"{args.dataset}_{args.seed}_{args.ntrain}_{args.npoints}"
 if not args.wandb:
     os.environ["WANDB_MODE"] = "disabled"
 wandb.login(key='d612cda26a5690e196d092756d668fc2aee8525b')
-wandb.init(project='ramansh', name=f'{name}')
+wandb.init(project='ramansh-tune', name=f'{name}')
 wandb.config.update(args)
 
 set_seed(args.seed)
@@ -222,7 +222,7 @@ with torch.no_grad():
         inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
         out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
         out = y_normalizer_sub.decode(out)
-        out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
+        out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 3) --> (batch, pts)
         y = torch.linalg.norm(y, dim=-1)
         test_l2_sub += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
 eval_t2_sub = time.perf_counter()
@@ -247,7 +247,7 @@ if args.calc_div:
             out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
             out = y_normalizer_sub.decode(out)
             y_preds_test.append(out)
-    y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, 2)
+    y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, 3)
     
     ### divergence calculation in jax and saving
 #     import jax; import jax.numpy as jnp

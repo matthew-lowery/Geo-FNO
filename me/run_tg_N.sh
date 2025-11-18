@@ -14,7 +14,7 @@ sp() {
 #SBATCH --partition=gpuA100x4,gpuA100x8
 #SBATCH --account=bfbk-delta-gpu
 #SBATCH --job-name=myjob
-#SBATCH --time=9:00:00
+#SBATCH --time=3:00:00
 #SBATCH --constraint="scratch"
 #SBATCH --gpus-per-node=1
 #SBATCH --output=./out/%x_%A.out
@@ -82,19 +82,11 @@ EOF
 #done
 #done
 #
-dataset='taylor_green_exact'
-for seed in 1 2 3; do
-for ntrain in 100 1000 10000; do 
-for npoints in 100 1000 5000; do
-sp "python3 ramansh.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=50 --width=64 --modes=20"
-done
-done
-done
 
 dataset='taylor_green_exact'
 for seed in 1 2 3; do
-for ntrain in 500 5000 7000; do 
-for npoints in 100 1000 5000 all; do
+for ntrain in  100 1000; do 
+for npoints in all; do
 sp "python3 ramansh.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=50 --width=64 --modes=20"
 done
 done
