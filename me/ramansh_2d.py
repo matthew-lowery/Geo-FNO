@@ -77,13 +77,14 @@ width = args.width
 
 ########## load data ########################################################################
 data = np.load(f'/projects/bfel/mlowery/geo-fno/{args.dataset}.npz')
+# data = np.load(f'../../ram_dataset/geo-fno/{args.dataset}.npz')
 
 x_grid = data['x_grid']
-train_x, test_x, train_y, test_y = data['x_train'], data['x_test'], data['y_train'], data['y_test']
-if train_x.ndim == 2: train_x = train_x[...,None]
-if test_x.ndim == 2: test_x = test_x[...,None]
+x_train, x_test, y_train, y_test = data['x_train'], data['x_test'], data['y_train'], data['y_test']
+if x_train.ndim == 2: x_train = x_train[...,None]
+if x_test.ndim == 2: x_test = x_test[...,None]
 
-train_x, train_y = train_x[:ntrain], train_y[:ntrain]
+x_train, y_train = x_train[:ntrain], y_train[:ntrain]
 
 ### norm rect domain to [0,1]^2
 if args.norm_grid:
@@ -91,71 +92,30 @@ if args.norm_grid:
     x_grid = (x_grid- x_grid_min) / (x_grid_max - x_grid_min)
 
 ### in dimensions and out dimensions
-in_channels = train_x.shape[-1] + x_grid.shape[-1]
-out_channels = train_y.shape[-1]
-
-########################################################################################
-### Here we are subsampling points in the training functions, but not in the test functions, which means our pointwise normalizer,
-### made from the training functions, and used on both training+test functions, must be amenable to both the subsampled grid and the full grid. 
-### So we just make a normalizer for both.
-
-if args.npoints != 'all':
-    def subsample_points(arr, d):
-        t = arr.shape[0] // d
-        kept_indices = np.arange(arr.shape[0])[::t]
-        r = arr[kept_indices, :]
-        removed_indices = np.linspace(0, kept_indices.shape[0] - 1, kept_indices.shape[0] - d, dtype=np.int32)
-        removed_from_kept = kept_indices[removed_indices]
-        final_kept_indices = np.setdiff1d(kept_indices, removed_from_kept)
-        r = arr[final_kept_indices]
-        return r, final_kept_indices
-    _, subsample_idx = subsample_points(x_grid, int(args.npoints))
-else:
-    ### full grid indices
-    subsample_idx = np.arange(len(x_grid))
+in_channels = x_train.shape[-1] + x_grid.shape[-1]
+out_channels = y_train.shape[-1]
 
 ### move to torch as the normalizers are written in torch and everything subsequently also
-train_x = torch.tensor(train_x, dtype=torch.float32)
-test_x =  torch.tensor(test_x, dtype=torch.float32)
-train_y = torch.tensor(train_y, dtype=torch.float32)
-test_y = torch.tensor(test_y, dtype=torch.float32)
+x_train = torch.tensor(x_train, dtype=torch.float32)
+x_test =  torch.tensor(x_test, dtype=torch.float32)
+y_train = torch.tensor(y_train, dtype=torch.float32)
+y_test = torch.tensor(y_test, dtype=torch.float32)
 x_grid = torch.tensor(x_grid, dtype=torch.float32)
-subsample_idx = torch.tensor(subsample_idx, dtype=torch.int32)
 
-x_normalizer = UnitGaussianNormalizer(train_x)
-train_x = x_normalizer.encode(train_x) ### normalize x before subsampling
-test_x = x_normalizer.encode(test_x)
+x_normalizer = UnitGaussianNormalizer(x_train)
+x_train = x_normalizer.encode(x_train) ### normalize x before subsampling
+x_test = x_normalizer.encode(x_test)
+y_normalizer = UnitGaussianNormalizer(y_train)
+y_normalizer.cuda()
 
-### training functions setup
-train_x_sub = train_x[:, subsample_idx]
-x_grid_sub = x_grid[subsample_idx]
-train_x_grid_sub = x_grid_sub.unsqueeze(0).repeat(ntrain, *([1] * x_grid.ndim))
-train_y_sub = train_y[:, subsample_idx]
+x_train_grid = x_grid.unsqueeze(0).repeat(ntrain, 1, 1)
+x_test_grid = x_grid.unsqueeze(0).repeat(ntest, 1, 1)
 
-### testing functions setup
-test_x_sub = test_x[:, subsample_idx]
-test_x_grid_sub = x_grid_sub.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
-test_y_sub =  test_y[:, subsample_idx]
-test_x_grid = x_grid.unsqueeze(0).repeat(ntest, *([1] * x_grid.ndim))
-
-print(f'{train_x_sub.shape=}, {train_x_grid_sub.shape=}, {train_y_sub.shape=}, {test_x.shape=}, {test_y.shape=}, {test_x_grid.shape=}')
-
-train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_x_sub, train_x_grid_sub, train_y_sub, train_x_grid_sub), 
+train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(x_train, x_train_grid, y_train, x_train_grid), 
                                                                             batch_size=batch_size, shuffle=True) 
 
-test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x, test_x_grid, test_y, test_x_grid), 
+test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(x_test, x_test_grid, y_test, x_test_grid), 
                                             batch_size=batch_size, shuffle=False) 
-
-test_loader_sub = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(test_x_sub, test_x_grid_sub, test_y_sub, test_x_grid_sub),
-                                              batch_size=batch_size, shuffle=False) 
-
-### each normalizer based on train, but each used on the model's predicted train/test output functions
-y_normalizer = UnitGaussianNormalizer(train_y)
-#y_normalizer_sub = UnitGaussianNormalizer(train_y_sub)
-y_normalizer_sub = copy.deepcopy(y_normalizer)
-y_normalizer_sub.mean = y_normalizer_sub.mean[subsample_idx]
-y_normalizer_sub.std = y_normalizer_sub.std[subsample_idx]
-y_normalizer.cuda(); y_normalizer_sub.cuda()
 
 
 ################################################################
@@ -185,7 +145,7 @@ for ep in range(epochs):
         optimizer_iphi.zero_grad() 
         inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
         out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi)
-        out = y_normalizer_sub.decode(out)
+        out = y_normalizer.decode(out)
         loss = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
         loss.backward()
         optimizer_fno.step()
@@ -214,24 +174,10 @@ with torch.no_grad():
         y = torch.linalg.norm(y, dim=-1)
         test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
 eval_t2 = time.perf_counter()
-
-test_l2_sub = 0.0
-eval_t1_sub = time.perf_counter()
-with torch.no_grad():
-    for x, x_grid, y, y_grid in test_loader_sub:
-        x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
-        inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
-        out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
-        out = y_normalizer_sub.decode(out)
-        out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 2) --> (batch, pts)
-        y = torch.linalg.norm(y, dim=-1)
-        test_l2_sub += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
-eval_t2_sub = time.perf_counter()
 test_l2 /= ntest
-test_l2_sub /= ntest
-print(ep, 'eval_time:', eval_t2-eval_t1, 'eval_sub_time', eval_t2_sub-eval_t1_sub, f'{test_l2=}', f'{test_l2_sub=}')
-wandb.log({"test_loss": test_l2, "test_loss_sub": test_l2_sub, "eval_time": eval_t2 - eval_t1, "eval_sub_time":eval_t2_sub-eval_t1_sub,
-            }, step=ep)
+
+print(ep, 'eval_time:', eval_t2-eval_t1, f'{test_l2=}')
+wandb.log({"test_loss": test_l2, "eval_time": eval_t2 - eval_t1}, step=ep)
 
 
 t2 = time.perf_counter()
@@ -243,24 +189,13 @@ if args.calc_div:
     y_preds_test = []
     
     with torch.no_grad():
-        for x, x_grid, y, y_grid in test_loader_sub:
+        for x, x_grid, y, y_grid in test_loader:
             x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
             inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
             out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
-            out = y_normalizer_sub.decode(out)
+            out = y_normalizer.decode(out)
             y_preds_test.append(out)
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, 2)
-    
-    ### divergence calculation in jax and saving
-#     import jax; import jax.numpy as jnp
-#     y_preds_test_jnp = jnp.asarray(y_preds_test, dtype=jnp.float64)
-#     x_grid_jnp = jnp.asarray(data['x_grid'][subsample_idx], dtype=jnp.float64) ### use the original f64 points, might as well
-#     torch.cuda.empty_cache()
-#     divs = jax.vmap(calc_div, in_axes=(0, None))(y_preds_test_jnp, x_grid_jnp)
-#     print(f'{jnp.max(jnp.abs(divs))=}, {jnp.mean(divs)=}')
-#     os.makedirs(args.div_folder, exist_ok=True)
-#     jnp.save(os.path.join(args.div_folder, name), divs)
-# 
 
 ### saving model for later use
 if args.save:
@@ -271,7 +206,7 @@ if args.save:
 
     ### saving test output functions for div calc 
     os.makedirs(args.div_folder, exist_ok=True)
-    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': data['x_grid'][subsample_idx.cpu().numpy()],
-                                                           'y_preds_test': y_preds_test.cpu().numpy().astype(np.float64)})
+    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': data['x_grid'],
+                                                                    'y_preds_test': y_preds_test.cpu().numpy().astype(np.float64)})
 
 
