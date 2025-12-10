@@ -14,7 +14,7 @@ sp() {
 #SBATCH --partition=gpuA100x4,gpuA100x8
 #SBATCH --account=bfbk-delta-gpu
 #SBATCH --job-name=myjob
-#SBATCH --time=9:00:00
+#SBATCH --time=20:00:00
 #SBATCH --constraint="scratch"
 #SBATCH --gpus-per-node=1
 #SBATCH --output=./out/%x_%A.out
@@ -27,88 +27,76 @@ $pycmd
 EOF
 }
 
-#for ntrain in 5000 10000; do 
-#dataset='backward_facing_step'
-#for seed in 1 2 3; do
-#for ntrain in  10000; do 
-#for npoints in all; do
-#sp "python3 ramansh.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=12"
-#done
-#done
-#done
-#
-#dataset='buoyancy_cavity_flow'
-#for seed in 1 2 3; do
-#for ntrain in  10000; do 
-#for npoints in all; do
-#sp "python3 ramansh.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=20"
-#done
-#done
-#done
-#
+#### need to specify how long each of these might take....
+dataset='backward_facing_step'
+for seed in 1 2 3; do
+for ntrain in 10000; do
+for npoints in all; do
+sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=12"
+done
+done
+done
+
+dataset='buoyancy_cavity_flow'
+for seed in 1 2 3; do
+for ntrain in 10000; do
+for npoints in all; do
+sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=20"
+done
+done
+done
+
 #dataset='flow_cylinder_laminar'
 #for seed in 1 2 3; do
-#for ntrain in  10000; do 
+#for ntrain in 7000 10000; do
 #for npoints in all; do
-#sp "python3 ramansh.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=60 --width=128 --modes=24"
+#sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=50 --width=128 --modes=24"
 #done
 #done
 #done
-#
-#dataset='flow_cylinder_shedding'
-#for seed in 1 2 3; do
-#for ntrain in  10000; do 
-#for npoints in all; do
-#sp "python3 ramansh.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=60 --width=64 --modes=28"
-#done
-#done
-#done
-#
-#dataset='lid_cavity_flow'
-#for seed in 1 2 3; do
-#for ntrain in  10000; do 
-#for npoints in all; do
-#sp "python3 ramansh.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=20"
-#done
-#done
-#done
-#
-#dataset='merge_vortices'
-#for seed in 1 2 3; do
-#for ntrain in  10000; do 
-#for npoints in all; do
-#sp "python3 ramansh.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=60 --width=128 --modes=12"
-#done
-#done
-#done
-#
-dataset='taylor_green_exact'
+
+dataset='flow_cylinder_shedding'
 for seed in 1 2 3; do
-for ntrain in 100 1000 10000; do 
-for npoints in 100 1000 5000; do
-sp "python3 ramansh.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=50 --width=64 --modes=20"
+for ntrain in 10000; do
+for npoints in all; do
+sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=60 --width=64 --modes=28"
+done
+done
+done
+
+dataset='lid_cavity_flow'
+for seed in 1 2 3; do
+for ntrain in 10000; do
+for npoints in all; do
+sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=20"
+done
+done
+done
+
+dataset='merge_vortices'
+for seed in 1 2 3; do
+for ntrain in 10000; do
+for npoints in all; do
+sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=60 --width=128 --modes=12"
 done
 done
 done
 
 dataset='taylor_green_exact'
 for seed in 1 2 3; do
-for ntrain in 500 5000 7000; do 
-for npoints in 100 1000 5000 all; do
-sp "python3 ramansh.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=50 --width=64 --modes=20"
+for ntrain in 10000; do
+for npoints in all; do
+sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=50 --width=64 --modes=20"
 done
 done
 done
 
+dataset='taylor_green_exact'
+for seed in 1 2 3; do
+for ntrain in 10000; do
+for npoints in all; do
+sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=50 --width=64 --modes=20"
+done
+done
+done
 
-
-#for npoints in 100 1000 5000 9520; do
-#for npoints in 100 1000 5000 9566; do
-#for npoints in 100 1000 5000 10514; do
-#for npoints in 100 1000 5000 7477; do
-#for npoints in 100 1000 5000 7359; do
-#for npoints in 100 1000 5000 7359; do
-#for npoints in 100 1000 5000 7477; do
-#for npoints in 100 1000 5000 7000; do
-#for npoints in 100 1000 2700; do
-#
