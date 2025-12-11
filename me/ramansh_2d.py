@@ -42,7 +42,8 @@ parser.add_argument('--save', action='store_true')
 parser.add_argument('--calc-div', action='store_true')
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
-parser.add_argument('--dataset', type=str, default='backward_facing_step', choices=['backward_facing_step', 
+parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno')
+parser.add_argument('--dataset', type=str, default='backward_facing_step', choices=['backward_facing_step', 'backward_facing_step_ood',
                                                                                     'buoyancy_cavity_flow', 
                                                                                     'flow_cylinder_laminar', 
                                                                                     'flow_cylinder_shedding', 
@@ -76,7 +77,7 @@ modes = args.modes
 width = args.width
 
 ########## load data ########################################################################
-data = np.load(f'/projects/bfel/mlowery/geo-fno/{args.dataset}.npz')
+data = np.load(os.path.join(args.dir, f'{args.dataset}.npz'))
 # data = np.load(f'../../ram_dataset/geo-fno/{args.dataset}.npz')
 
 x_grid = data['x_grid']

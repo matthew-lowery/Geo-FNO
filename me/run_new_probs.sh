@@ -58,12 +58,3 @@ sp "python3 ramansh_3d_airfoil.py --calc-div --save --wandb --seed=$seed --ntrai
 done
 done
 
-res1d=50
-modes=16
-width=64
-for seed in 1 2 3; do
-for ntrain in 5000 7000 10000; do 
-sp "python3 ramansh_2d_backward_facing_step_bc.py --calc-div --save --wandb --seed=$seed --ntrain=$ntrain --norm-grid --res1d=$res1d --width=$width --modes=$modes" 8
-done
-done
-
