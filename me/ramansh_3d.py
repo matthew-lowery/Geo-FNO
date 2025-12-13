@@ -43,7 +43,7 @@ parser.add_argument('--project-name', type=str, default='ramansh')
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
 parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno')
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
-parser.add_argument('--dataset', type=str, default='taylor_green_time', choices=['taylor_green_time', 'species_transport'])
+parser.add_argument('--dataset', type=str, default='taylor_green_time', choices=['taylor_green_time', 'species_transport', 'taylor_green_time_coeffs'])
                                                                       
 args = parser.parse_args()
 print(args)
@@ -91,6 +91,10 @@ elif args.dataset == 'species_transport':
     min, max = np.min(y_grid, axis=0, keepdims=True), np.max(y_grid, axis=0, keepdims=True)
     x_grid = (x_grid - min) / (max - min)
     y_grid = (y_grid - min) / (max - min)
+elif args.dataset == 'taylor_green_time_coeffs':
+    ## x_grid is a subset of y_grid so norm with y_grid
+    min, max = np.min(y_grid, axis=0, keepdims=True), np.max(y_grid, axis=0, keepdims=True)
+    y_grid = (y_grid - min) / (max - min) ## x grid is already [0,1]^3
 
 
 ### move to torch as the normalizers are written in torch and everything subsequently also

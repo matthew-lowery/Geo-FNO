@@ -27,5 +27,20 @@ $pycmd
 EOF
 }
 ### tune for tgtc and tgc
+dir='/projects/bfel/mlowery/geo-fno-new'
+for res1d in 10 15 20 25 30; do
+sp "python3 ramansh_3d.py --dir=$dir --dataset='taylor_green_time_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --res1d=$res1d --width=32 --modes=$((res1d/2))"
+done
 
-sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=60 --width=128 --modes=12"
+for width in 64 128; do
+sp "python3 ramansh_3d.py --dir=$dir --dataset='taylor_green_time_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --width=$width --res1d=15 --modes=7"
+done
+
+for res1d in 20 30 40 50 60; do
+sp "python3 ramansh_2d_diff_grids.py --dir=$dir --dataset='taylor_green_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --res1d=$res1d --width=32 --modes=$((res1d/2))"
+done
+
+for width in 64 128; do
+sp "python3 ramansh_2d_diff_grids.py --dir=$dir --dataset='taylor_green_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --width=$width"
+done
+

@@ -42,7 +42,7 @@ parser.add_argument('--save', action='store_true')
 parser.add_argument('--calc-div', action='store_true')
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
 parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno')
-parser.add_argument('--project-name', type=str, default='ramansh')
+parser.add_argument('--project-name', type=str, default='ramansh_specific')
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
 parser.add_argument('--dataset', type=str, default='taylor_green_coefs')
 
