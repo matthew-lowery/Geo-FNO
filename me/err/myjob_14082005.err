@@ -1,0 +1,11 @@
+/u/mlowery/.conda/envs/gnot/lib/python3.10/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+wandb: Appending key for api.wandb.ai to your netrc file: /u/mlowery/.netrc
+wandb: Currently logged in as: mattlowery10 (certann) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.22.0
+wandb: Run data is saved locally in /u/mlowery/Geo-FNO/me/wandb/run-20251212_011056-x6h2cnhs
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run species_transport_3_7000_2700
+wandb: ⭐️ View project at https://wandb.ai/certann/ramansh-tune
+wandb: 🚀 View run at https://wandb.ai/certann/ramansh-tune/runs/x6h2cnhs
+slurmstepd: error: *** JOB 14082005 ON gpua050 CANCELLED AT 2025-12-12T16:11:12 DUE TO TIME LIMIT ***

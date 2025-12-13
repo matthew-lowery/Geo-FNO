@@ -1,0 +1,23 @@
+/u/mlowery/.conda/envs/gnot/lib/python3.10/site-packages/requests/__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+  warnings.warn(
+wandb: Appending key for api.wandb.ai to your netrc file: /u/mlowery/.netrc
+wandb: Currently logged in as: mattlowery10 (certann) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: creating run
+wandb: Tracking run with wandb version 0.22.0
+wandb: Run data is saved locally in /u/mlowery/Geo-FNO/me/wandb/run-20251212_011059-rlwvbd8f
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run backward_facing_step_ood_2_10000_all
+wandb: ⭐️ View project at https://wandb.ai/certann/ramansh
+wandb: 🚀 View run at https://wandb.ai/certann/ramansh/runs/rlwvbd8f
+Traceback (most recent call last):
+  File "/u/mlowery/Geo-FNO/me/ramansh_2d.py", line 118, in <module>
+    test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(x_test, x_test_grid, y_test, x_test_grid),
+  File "/u/mlowery/.conda/envs/gnot/lib/python3.10/site-packages/torch/utils/data/dataset.py", line 201, in __init__
+    assert all(tensors[0].size(0) == tensor.size(0) for tensor in tensors), (
+AssertionError: Size mismatch between tensors
+Traceback (most recent call last):
+  File "/u/mlowery/Geo-FNO/me/ramansh_2d.py", line 118, in <module>
+    test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(x_test, x_test_grid, y_test, x_test_grid),
+  File "/u/mlowery/.conda/envs/gnot/lib/python3.10/site-packages/torch/utils/data/dataset.py", line 201, in __init__
+    assert all(tensors[0].size(0) == tensor.size(0) for tensor in tensors), (
+AssertionError: Size mismatch between tensors

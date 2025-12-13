@@ -27,14 +27,14 @@ $pycmd
 EOF
 }
 
-dataset='merge_vortices_easier'
-for seed in 1 2 3; do
-for ntrain in 10000; do
-for npoints in all; do
-sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=60 --width=128 --modes=12"
-done
-done
-done
+#dataset='merge_vortices_easier'
+#for seed in 1 2 3; do
+#for ntrain in 10000; do
+#for npoints in all; do
+#sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=60 --width=128 --modes=12"
+#done
+#done
+#done
 
 #### need to specify how long each of these might take....
 dataset='backward_facing_step_ood'

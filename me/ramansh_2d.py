@@ -38,6 +38,7 @@ parser.add_argument('--epochs', type=int, default=500)
 parser.add_argument('--norm-grid', action='store_true')
 parser.add_argument('--batch-size', type=int, default=20)
 parser.add_argument('--wandb', action='store_true')
+parser.add_argument('--project-name', type=str, default='ramansh')
 parser.add_argument('--save', action='store_true')
 parser.add_argument('--calc-div', action='store_true')
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
@@ -62,7 +63,7 @@ name = f"{args.dataset}_{args.seed}_{args.ntrain}_{args.npoints}"
 if not args.wandb:
     os.environ["WANDB_MODE"] = "disabled"
 wandb.login(key='d612cda26a5690e196d092756d668fc2aee8525b')
-wandb.init(project='ramansh', name=f'{name}')
+wandb.init(project=args.project_name, name=f'{name}')
 wandb.config.update(args)
 
 set_seed(args.seed)
@@ -71,7 +72,7 @@ learning_rate_fno = args.lr_fno
 learning_rate_iphi = args.lr_phi
 
 epochs = args.epochs
-ntrain,ntest = args.ntrain, 200 ### ntest is always 200 for ram's problems
+ntrain = args.ntrain
 
 modes = args.modes
 width = args.width
@@ -82,6 +83,7 @@ data = np.load(os.path.join(args.dir, f'{args.dataset}.npz'))
 
 x_grid = data['x_grid']
 x_train, x_test, y_train, y_test = data['x_train'], data['x_test'], data['y_train'], data['y_test']
+ntest = len(x_test)
 if x_train.ndim == 2: x_train = x_train[...,None]
 if x_test.ndim == 2: x_test = x_test[...,None]
 
@@ -111,7 +113,7 @@ y_normalizer.cuda()
 
 x_train_grid = x_grid.unsqueeze(0).repeat(ntrain, 1, 1)
 x_test_grid = x_grid.unsqueeze(0).repeat(ntest, 1, 1)
-
+print(x_train.shape, x_train_grid.shape, y_train.shape, x_train_grid.shape, x_test.shape, x_test_grid.shape, y_test.shape, x_test_grid.shape)
 train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(x_train, x_train_grid, y_train, x_train_grid), 
                                                                             batch_size=batch_size, shuffle=True) 
 

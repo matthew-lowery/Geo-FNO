@@ -3,3 +3,4 @@ data/
 archive
 **/wandb/
 **/__pycache__/
+**/out/

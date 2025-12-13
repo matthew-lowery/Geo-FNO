@@ -42,6 +42,7 @@ parser.add_argument('--save', action='store_true')
 parser.add_argument('--calc-div', action='store_true')
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
 parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno')
+parser.add_argument('--project-name', type=str, default='ramansh')
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
 parser.add_argument('--dataset', type=str, default='taylor_green_coefs')
 
@@ -51,7 +52,7 @@ name = f"{args.dataset}_{args.seed}_{args.ntrain}_{args.npoints}"
 if not args.wandb:
     os.environ["WANDB_MODE"] = "disabled"
 wandb.login(key='d612cda26a5690e196d092756d668fc2aee8525b')
-wandb.init(project='ramansh', name=f'{name}')
+wandb.init(project=args.project_name, name=f'{name}')
 wandb.config.update(args)
 
 set_seed(args.seed)
