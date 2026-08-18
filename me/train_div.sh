@@ -72,16 +72,14 @@ submit_2d_diff_grids() {
 submit_2d flow_cylinder_laminar 100 60 128 24 8
 submit_2d flow_cylinder_shedding 10000 60 64 28 8
 submit_2d lid_cavity_flow 10000 40 64 20 8
-submit_2d merge_vortices_easier 500 60 128 12 8
-submit_2d buoyancy_cavity_flow 10000 40 64 20 8
-submit_2d backward_facing_step_ood 500 40 64 12 8
 submit_2d backward_facing_step 500 40 64 12 8
+submit_2d buoyancy_cavity_flow 10000 40 64 20 8
 submit_2d taylor_green_exact 5000 50 64 20 8
-
+submit_3d taylor_green_time 500 15 64 7 5
+submit_2d merge_vortices_easier 500 60 128 12 8
+submit_3d species_transport 10000 20 64 10 30
 submit_airfoil 7000 25 64 12 12
 
-submit_3d taylor_green_time 500 15 64 7 5
-submit_3d species_transport 10000 20 64 10 30
+submit_2d backward_facing_step_ood 500 40 64 12 8
 submit_3d taylor_green_time_coeffs 500 15 64 7 10
-
 submit_2d_diff_grids taylor_green_coeffs 500 40 64 12 10
