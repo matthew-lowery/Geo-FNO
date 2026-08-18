@@ -10,8 +10,112 @@ import os, copy
 from model import FNO2d, IPHI
 import wandb
 import time
-#from calc_div_local_wls_poly import calc_div
 import scipy
+from itertools import product
+from scipy.linalg import lstsq
+from scipy.spatial import cKDTree
+
+
+def build_rbf_fd_gradient(points, order=5):
+    points = np.asarray(points, dtype=np.float64)
+    spatial_dim = points.shape[1]
+    poly_powers = np.asarray([
+        powers for powers in product(range(order + 1), repeat=spatial_dim)
+        if sum(powers) <= order
+    ])
+    poly_count = len(poly_powers)
+    stencil_size = 2 * poly_count + 1
+    if stencil_size > len(points):
+        raise ValueError(f"RBF-FD stencil needs {stencil_size} points, got {len(points)}")
+
+    rbf_power = order if order % 2 else order - 1
+    rbf_power = min(max(rbf_power, 5), 11)
+    tree = cKDTree(points)
+    rows = np.repeat(np.arange(len(points)), stencil_size)
+    columns = np.empty_like(rows)
+    weights = np.empty((spatial_dim, len(rows)), dtype=np.float64)
+    eps = np.finfo(np.float64).eps
+
+    for center_idx, center in enumerate(points):
+        distances, stencil = tree.query(center, k=stencil_size)
+        stencil_points = points[stencil]
+        pairwise = np.linalg.norm(
+            stencil_points[:, None] - stencil_points[None, :], axis=-1
+        )
+        scale = distances[-1]
+        local_points = (stencil_points - center) / scale
+        polys = np.prod(
+            local_points[:, None, :] ** poly_powers[None, :, :], axis=-1
+        )
+        system = np.block([
+            [pairwise ** rbf_power, polys],
+            [polys.T, np.zeros((poly_count, poly_count))],
+        ])
+
+        derivative = np.zeros((stencil_size + poly_count, spatial_dim))
+        derivative[:stencil_size] = (
+            (center - stencil_points)
+            * rbf_power
+            * (pairwise[0, :, None] + eps) ** (rbf_power - 2)
+        )
+        for axis in range(spatial_dim):
+            first_power = np.zeros(spatial_dim, dtype=int)
+            first_power[axis] = 1
+            poly_idx = np.flatnonzero(np.all(poly_powers == first_power, axis=1))[0]
+            derivative[stencil_size + poly_idx, axis] = 1 / scale
+
+        local_weights = lstsq(
+            system, derivative, lapack_driver='gelsy', check_finite=False
+        )[0]
+        block = slice(center_idx * stencil_size, (center_idx + 1) * stencil_size)
+        columns[block] = stencil
+        weights[:, block] = local_weights[:stencil_size].T
+
+    indices = torch.tensor(np.stack((rows, columns)), dtype=torch.long)
+    return tuple(
+        torch.sparse_coo_tensor(
+            indices,
+            torch.tensor(axis_weights, dtype=torch.float32),
+            (len(points), len(points)),
+        ).coalesce()
+        for axis_weights in weights
+    )
+
+
+def build_interior_mask(points, cylindrical=False):
+    points = np.asarray(points)
+    if cylindrical:
+        radius = np.linalg.norm(points[:, :2], axis=1)
+        boundary = (
+            (points[:, 2] == points[:, 2].min())
+            | (points[:, 2] == points[:, 2].max())
+            | np.isclose(radius, radius.max())
+        )
+    else:
+        spans = np.ptp(points, axis=0)
+        active_axes = spans > 100 * np.finfo(points.dtype).eps
+        active_points = points[:, active_axes]
+        boundary = np.any(
+            (active_points == active_points.min(axis=0))
+            | (active_points == active_points.max(axis=0)),
+            axis=1,
+        )
+    if boundary.all():
+        raise ValueError("Divergence loss has no interior points")
+    return torch.tensor(~boundary, dtype=torch.bool)
+
+
+def divergence_loss(vector_field, gradient_operators, interior_mask, time_steps=1):
+    batch_size, _, vector_dim = vector_field.shape
+    vector_field = vector_field.reshape(
+        batch_size, -1, time_steps, vector_dim
+    ).permute(0, 2, 1, 3).reshape(batch_size * time_steps, -1, vector_dim)
+    divergence = sum(
+        torch.sparse.mm(operator, vector_field[..., axis].T).T
+        for axis, operator in enumerate(gradient_operators)
+    )
+    divergence = divergence[:, interior_mask]
+    return divergence.square().mean(dim=1).sum() / time_steps
 
 def set_seed(seed):    
     torch.manual_seed(seed)
@@ -41,6 +145,8 @@ parser.add_argument('--wandb', action='store_true')
 parser.add_argument('--project-name', type=str, default='ramansh')
 parser.add_argument('--save', action='store_true')
 parser.add_argument('--calc-div', action='store_true')
+parser.add_argument('--div-loss', action='store_true')
+parser.add_argument('--div-loss-weight', type=float, default=1.0)
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
 parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno')
@@ -97,6 +203,14 @@ if args.norm_grid:
 ### in dimensions and out dimensions
 in_channels = x_train.shape[-1] + x_grid.shape[-1]
 out_channels = y_train.shape[-1]
+gradient_operators = None
+interior_mask = None
+if args.div_loss:
+    physical_grid = data['x_grid'][:, :2]
+    gradient_operators = tuple(
+        operator.cuda() for operator in build_rbf_fd_gradient(physical_grid)
+    )
+    interior_mask = build_interior_mask(physical_grid).cuda()
 
 ### move to torch as the normalizers are written in torch and everything subsequently also
 x_train = torch.tensor(x_train, dtype=torch.float32)
@@ -140,6 +254,8 @@ t1 = time.perf_counter()
 for ep in range(epochs):
     model.train()
     train_l2 = 0
+    train_div = 0
+    train_total = 0
     train_t1 = time.perf_counter()
     for x, x_grid, y, y_grid in train_loader:
         x, x_grid, y, y_grid = x.cuda(), x_grid.cuda(), y.cuda(), y_grid.cuda()
@@ -149,19 +265,26 @@ for ep in range(epochs):
         inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
         out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi)
         out = y_normalizer.decode(out)
-        loss = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
+        data_loss = myloss(out.view(batch_size, -1), y.view(batch_size, -1))
+        div_loss = divergence_loss(out, gradient_operators, interior_mask) if args.div_loss else out.new_zeros(())
+        loss = data_loss + args.div_loss_weight * div_loss
         loss.backward()
         optimizer_fno.step()
         optimizer_iphi.step()
-        train_l2 += loss.item()
+        train_l2 += data_loss.item()
+        train_div += div_loss.item()
+        train_total += loss.item()
     train_t2 = time.perf_counter() 
 
     scheduler_fno.step()
     scheduler_iphi.step()
      
     train_l2 /= ntrain
-    print(ep, 'train_time:', train_t2-train_t1, f'{train_l2=}')
-    wandb.log({"train_loss": train_l2, "train_time": train_t2-train_t1}, step=ep)
+    train_div /= ntrain
+    train_total /= ntrain
+    print(ep, 'train_time:', train_t2-train_t1, f'{train_total=}', f'{train_l2=}', f'{train_div=}')
+    wandb.log({"train_loss": train_total, "train_data_loss": train_l2,
+               "train_div_loss": train_div, "train_time": train_t2-train_t1}, step=ep)
 
 ### eval when training is over
 model.eval()
@@ -211,5 +334,3 @@ if args.save:
     os.makedirs(args.div_folder, exist_ok=True)
     scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': data['x_grid'],
                                                                     'y_preds_test': y_preds_test.cpu().numpy().astype(np.float64)})
-
-
