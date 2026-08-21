@@ -188,20 +188,20 @@ train_x, train_y = train_x[:ntrain], train_y[:ntrain]
 if args.dataset == 'taylor_green_time':
     xs = x_grid_spatial = x_grid[:,:2] ## t is already in [0,1]
     ys = y_grid[:,:2]
-    min, max = np.min(xs, axis=0, keepdims=True), np.max(xs, axis=0, keepdims=True)
-    xs_norm = (xs - min) / (max - min)
-    ys_norm = (ys - min) / (max - min)
+    grid_min, grid_max = np.min(xs, axis=0, keepdims=True), np.max(xs, axis=0, keepdims=True)
+    xs_norm = (xs - grid_min) / (grid_max - grid_min)
+    ys_norm = (ys - grid_min) / (grid_max - grid_min)
     x_grid[:,:2] = xs_norm
     y_grid[:,:2] = ys_norm
 elif args.dataset == 'species_transport':
     ## x_grid is a subset of y_grid so norm with y_grid
-    min, max = np.min(y_grid, axis=0, keepdims=True), np.max(y_grid, axis=0, keepdims=True)
-    x_grid = (x_grid - min) / (max - min)
-    y_grid = (y_grid - min) / (max - min)
+    grid_min, grid_max = np.min(y_grid, axis=0, keepdims=True), np.max(y_grid, axis=0, keepdims=True)
+    x_grid = (x_grid - grid_min) / (grid_max - grid_min)
+    y_grid = (y_grid - grid_min) / (grid_max - grid_min)
 elif args.dataset == 'taylor_green_time_coeffs':
     ## x_grid is a subset of y_grid so norm with y_grid
-    min, max = np.min(y_grid, axis=0, keepdims=True), np.max(y_grid, axis=0, keepdims=True)
-    y_grid = (y_grid - min) / (max - min) ## x grid is already [0,1]^3
+    grid_min, grid_max = np.min(y_grid, axis=0, keepdims=True), np.max(y_grid, axis=0, keepdims=True)
+    y_grid = (y_grid - grid_min) / (grid_max - grid_min) ## x grid is already [0,1]^3
 
 
 ### move to torch as the normalizers are written in torch and everything subsequently also
