@@ -14,6 +14,7 @@ import scipy
 from itertools import product
 from scipy.linalg import lstsq
 from scipy.spatial import cKDTree
+from ram_dataset_loader import load_dataset, load_ood_dataset
 
 
 def build_rbf_fd_gradient(points, order=5):
@@ -138,6 +139,7 @@ parser.add_argument('--lr-phi', type=float, default=1e-4)
 parser.add_argument('--lr-fno', type=float, default=1e-3)
 parser.add_argument('--ntrain', type=int, default=1_000)
 parser.add_argument('--npoints', type=str, default='2700')
+parser.add_argument('--data-root', type=str, default='/home/ramansh/pde_ml/code/op_dataset')
 parser.add_argument('--epochs', type=int, default=500)
 parser.add_argument('--norm-grid', action='store_true')
 parser.add_argument('--batch-size', type=int, default=20)
@@ -150,7 +152,9 @@ parser.add_argument('--project-name', type=str, default='ramansh')
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
 parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno-new')
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
-parser.add_argument('--dataset', type=str, default='taylor_green_time', choices=['taylor_green_time', 'species_transport', 'taylor_green_time_coeffs'])
+parser.add_argument('--dataset', type=str, default='taylor_green_time', choices=['taylor_green_time', 'taylor_green_spacetime', 'species_transport', 'taylor_green_time_coeffs', 'taylor_green_spacetime_coeffs', 'forced_turb'])
+parser.add_argument('--no-ood', dest='eval_ood', action='store_false')
+parser.set_defaults(eval_ood=True)
                                                                       
 args = parser.parse_args()
 print(args)
@@ -173,19 +177,23 @@ modes = args.modes
 width = args.width
 
 ########### load data ########################################################################
-data = np.load(os.path.join(args.dir, f'{args.dataset}.npz'))
-# data = np.load(f'../../ram_dataset/geo-fno/{args.dataset}.npz')
+point_count = None if args.npoints == 'all' else int(args.npoints)
+dataset = load_dataset(args.dataset, ntrain, point_count, args.data_root)
+x_grid = dataset.input_points
+y_grid = dataset.output_points
+physical_input_grid = x_grid.copy()
+physical_output_grid = y_grid.copy()
+train_x, test_x = dataset.train_input, dataset.test_input
+train_y, test_y = dataset.train_output, dataset.test_output
+ntest = len(test_x)
 
-x_grid = data['x_grid']; y_grid = data['y_grid']
-train_x, test_x, train_y, test_y = data['x_train'], data['x_test'], data['y_train'], data['y_test']
-
-if train_x.ndim == 2: train_x = train_x[...,None]
-if test_x.ndim == 2: test_x = test_x[...,None]
-
-train_x, train_y = train_x[:ntrain], train_y[:ntrain]
+if train_x.ndim == 2: train_x = train_x[..., None]
+if test_x.ndim == 2: test_x = test_x[..., None]
 
 ### basically norm domain to \in [0,1]^d
-if args.dataset == 'taylor_green_time':
+is_spacetime = args.dataset in {'taylor_green_time', 'taylor_green_spacetime'}
+is_spacetime_coeffs = args.dataset in {'taylor_green_time_coeffs', 'taylor_green_spacetime_coeffs'}
+if is_spacetime:
     xs = x_grid_spatial = x_grid[:,:2] ## t is already in [0,1]
     ys = y_grid[:,:2]
     grid_min, grid_max = np.min(xs, axis=0, keepdims=True), np.max(xs, axis=0, keepdims=True)
@@ -198,10 +206,16 @@ elif args.dataset == 'species_transport':
     grid_min, grid_max = np.min(y_grid, axis=0, keepdims=True), np.max(y_grid, axis=0, keepdims=True)
     x_grid = (x_grid - grid_min) / (grid_max - grid_min)
     y_grid = (y_grid - grid_min) / (grid_max - grid_min)
-elif args.dataset == 'taylor_green_time_coeffs':
-    ## x_grid is a subset of y_grid so norm with y_grid
+elif is_spacetime_coeffs:
+    combined_grid = np.concatenate((x_grid, y_grid), axis=0)
+    grid_min = np.min(combined_grid, axis=0, keepdims=True)
+    grid_max = np.max(combined_grid, axis=0, keepdims=True)
+    x_grid = (x_grid - grid_min) / (grid_max - grid_min)
+    y_grid = (y_grid - grid_min) / (grid_max - grid_min)
+elif args.dataset == 'forced_turb' and args.norm_grid:
     grid_min, grid_max = np.min(y_grid, axis=0, keepdims=True), np.max(y_grid, axis=0, keepdims=True)
-    y_grid = (y_grid - grid_min) / (grid_max - grid_min) ## x grid is already [0,1]^3
+    x_grid = (x_grid - grid_min) / (grid_max - grid_min)
+    y_grid = (y_grid - grid_min) / (grid_max - grid_min)
 
 
 ### move to torch as the normalizers are written in torch and everything subsequently also
@@ -241,11 +255,13 @@ gradient_operators = None
 interior_mask = None
 div_time_steps = 1
 if args.div_loss:
-    if args.dataset.startswith('taylor_green_time'):
+    if is_spacetime or is_spacetime_coeffs:
         div_time_steps = 4
-        physical_grid = data['y_grid'].reshape(-1, div_time_steps, 3)[:, 0, :2]
+        physical_grid = physical_output_grid.reshape(-1, div_time_steps, 3)[:, 0, :2]
+    elif args.dataset == 'forced_turb':
+        physical_grid = physical_output_grid
     else:
-        physical_grid = data['y_grid'][:, :out_channels]
+        physical_grid = physical_output_grid[:, :out_channels]
     gradient_operators = tuple(
         operator.cuda() for operator in build_rbf_fd_gradient(physical_grid)
     )
@@ -340,6 +356,44 @@ if args.calc_div:
             y_preds_test.append(out)
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, out.shape[-1])
 
+if args.eval_ood:
+    ood_x_grid, ood_y_grid, ood_x, ood_y = load_ood_dataset(
+        args.dataset, point_count, args.data_root
+    )
+    ood_x = torch.tensor(ood_x, dtype=torch.float32)
+    ood_y = torch.tensor(ood_y, dtype=torch.float32)
+    if ood_x.ndim == 2:
+        ood_x = ood_x[..., None]
+    ood_x = x_normalizer.encode(ood_x)
+    if args.norm_grid:
+        if args.dataset.startswith('taylor_green'):
+            ood_x_grid = ood_x_grid.copy()
+            ood_y_grid = ood_y_grid.copy()
+            ood_x_grid[:, :2] = (ood_x_grid[:, :2] - grid_min[:, :2]) / (grid_max[:, :2] - grid_min[:, :2])
+            ood_y_grid[:, :2] = (ood_y_grid[:, :2] - grid_min[:, :2]) / (grid_max[:, :2] - grid_min[:, :2])
+        else:
+            ood_x_grid = (ood_x_grid - grid_min) / (grid_max - grid_min)
+            ood_y_grid = (ood_y_grid - grid_min) / (grid_max - grid_min)
+    ood_x_grid = torch.tensor(ood_x_grid, dtype=torch.float32)
+    ood_y_grid = torch.tensor(ood_y_grid, dtype=torch.float32)
+    ood_x_grid = ood_x_grid.unsqueeze(0).repeat(len(ood_x), 1, 1)
+    ood_y_grid = ood_y_grid.unsqueeze(0).repeat(len(ood_x), 1, 1)
+    ood_loader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(ood_x, ood_x_grid, ood_y, ood_y_grid),
+        batch_size=batch_size, shuffle=False
+    )
+    ood_loss = 0.0
+    with torch.no_grad():
+        for x, x_grid_batch, y, y_grid_batch in ood_loader:
+            x, x_grid_batch = x.cuda(), x_grid_batch.cuda()
+            y, y_grid_batch = y.cuda(), y_grid_batch.cuda()
+            inp = torch.concat((x, x_grid_batch), axis=-1)
+            out = model(inp, code=None, x_in=x_grid_batch, x_out=y_grid_batch, iphi=model_iphi)
+            out = y_normalizer.decode(out)
+            ood_loss += myloss(out.reshape(len(x), -1), y.reshape(len(x), -1)).item()
+    ood_loss /= len(ood_x)
+    wandb.log({f'ood/{args.dataset}': ood_loss}, step=ep)
+
 ### saving model for later use
 if args.save:
     os.makedirs(args.model_folder, exist_ok=True)
@@ -349,5 +403,5 @@ if args.save:
 
     ### saving test output functions for div calc 
     os.makedirs(args.div_folder, exist_ok=True)
-    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': data['x_grid'],
+    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': dataset.output_points,
                                                            'y_preds_test': y_preds_test.cpu().numpy().astype(np.float64)})
