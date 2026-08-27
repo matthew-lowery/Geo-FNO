@@ -207,10 +207,8 @@ elif args.dataset == 'species_transport':
     x_grid = (x_grid - grid_min) / (grid_max - grid_min)
     y_grid = (y_grid - grid_min) / (grid_max - grid_min)
 elif is_spacetime_coeffs:
-    combined_grid = np.concatenate((x_grid, y_grid), axis=0)
-    grid_min = np.min(combined_grid, axis=0, keepdims=True)
-    grid_max = np.max(combined_grid, axis=0, keepdims=True)
-    x_grid = (x_grid - grid_min) / (grid_max - grid_min)
+    grid_min = np.min(y_grid, axis=0, keepdims=True)
+    grid_max = np.max(y_grid, axis=0, keepdims=True)
     y_grid = (y_grid - grid_min) / (grid_max - grid_min)
 elif args.dataset == 'forced_turb' and args.norm_grid:
     grid_min, grid_max = np.min(y_grid, axis=0, keepdims=True), np.max(y_grid, axis=0, keepdims=True)
