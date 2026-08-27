@@ -2,14 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from timeit import default_timer
-import sys
-sys.path.append('..')
-from utilities3 import *
-from Adam import Adam
-import torch
-import torch.nn as nn
-import numpy as np
 
 def set_seed(seed):    
     torch.manual_seed(seed)
@@ -17,10 +9,6 @@ def set_seed(seed):
     torch.cuda.manual_seed(seed)
 
 torch.backends.cudnn.deterministic = True
-
-import torch
-import torch.nn as nn
-import numpy as np
 
 class SpectralConv3d(nn.Module):
 
@@ -228,7 +216,7 @@ class SpectralConv3d(nn.Module):
 # 3D IPHI (coordinate warp): x -> xi
 # ---------------------------
 class IPHI(nn.Module):
-    def __init__(self, width=32, code_dim=None, device='cuda'):
+    def __init__(self, width=32, code_dim=None, device=None):
         super().__init__()
         self.width = width
         self.code_dim = code_dim
@@ -256,7 +244,10 @@ class IPHI(nn.Module):
         self.fc2 = nn.Linear(4 * width, 4 * width)
         self.fc3 = nn.Linear(4 * width, 3)
 
-        self.center = torch.tensor([0.5, 0.5, 0.5], device=device).view(1, 1, 3)
+        center = torch.tensor([0.5, 0.5, 0.5])
+        if device is not None:
+            center = center.to(device)
+        self.register_buffer('center', center.view(1, 1, 3))
 
     def forward(self, x, code=None):
         # x: (B,N,3)
@@ -387,5 +378,4 @@ class FNO3d(nn.Module):
             u = F.gelu(self.fc1(u))                                # (B,s1,s2,s3,128)
             u = self.fc2(u)                                        # (B,s1,s2,s3,Cout)
             return u
-
 

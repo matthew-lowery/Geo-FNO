@@ -354,10 +354,15 @@ if args.calc_div:
             y_preds_test.append(out)
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, out.shape[-1])
 
+ood_dataset = None
 if args.eval_ood:
-    ood_x_grid, ood_y_grid, ood_x, ood_y = load_ood_dataset(
-        args.dataset, point_count, args.data_root
-    )
+    try:
+        ood_dataset = load_ood_dataset(args.dataset, point_count, args.data_root)
+    except (FileNotFoundError, KeyError, ValueError) as exc:
+        print(f'OOD unavailable: {exc}')
+
+if ood_dataset is not None:
+    ood_x_grid, ood_y_grid, ood_x, ood_y = ood_dataset
     ood_x = torch.tensor(ood_x, dtype=torch.float32)
     ood_y = torch.tensor(ood_y, dtype=torch.float32)
     if ood_x.ndim == 2:
