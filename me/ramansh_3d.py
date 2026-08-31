@@ -40,11 +40,13 @@ def build_rbf_fd_gradient(points, order=5):
     for center_idx, center in enumerate(points):
         distances, stencil = tree.query(center, k=stencil_size)
         stencil_points = points[stencil]
-        pairwise = np.linalg.norm(
-            stencil_points[:, None] - stencil_points[None, :], axis=-1
-        )
         scale = distances[-1]
+        if not np.isfinite(scale) or scale <= eps:
+            raise ValueError("RBF-FD stencil contains coincident points")
         local_points = (stencil_points - center) / scale
+        pairwise = np.linalg.norm(
+            local_points[:, None] - local_points[None, :], axis=-1
+        )
         polys = np.prod(
             local_points[:, None, :] ** poly_powers[None, :, :], axis=-1
         )
@@ -55,9 +57,10 @@ def build_rbf_fd_gradient(points, order=5):
 
         derivative = np.zeros((stencil_size + poly_count, spatial_dim))
         derivative[:stencil_size] = (
-            (center - stencil_points)
+            -local_points
             * rbf_power
             * (pairwise[0, :, None] + eps) ** (rbf_power - 2)
+            / scale
         )
         for axis in range(spatial_dim):
             first_power = np.zeros(spatial_dim, dtype=int)
@@ -150,7 +153,7 @@ parser.add_argument('--div-loss', action='store_true')
 parser.add_argument('--div-loss-weight', type=float, default=1.0)
 parser.add_argument('--project-name', type=str, default='ramansh')
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
-parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno-new')
+parser.add_argument('--dir', type=str)
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
 parser.add_argument('--dataset', type=str, default='taylor_green_time', choices=['taylor_green_time', 'taylor_green_spacetime', 'species_transport', 'taylor_green_time_coeffs', 'taylor_green_spacetime_coeffs', 'forced_turb'])
 parser.add_argument('--no-ood', dest='eval_ood', action='store_false')
@@ -178,13 +181,32 @@ width = args.width
 
 ########### load data ########################################################################
 point_count = None if args.npoints == 'all' else int(args.npoints)
-dataset = load_dataset(args.dataset, ntrain, point_count, args.data_root)
-x_grid = dataset.input_points
-y_grid = dataset.output_points
+legacy_filename = {
+    'taylor_green_time': 'taylor_green_time',
+    'taylor_green_spacetime': 'taylor_green_time',
+    'taylor_green_time_coeffs': 'taylor_green_time_coeffs',
+    'taylor_green_spacetime_coeffs': 'taylor_green_time_coeffs',
+    'species_transport': 'species_transport',
+}.get(args.dataset)
+if legacy_filename:
+    legacy_dir = args.dir or (
+        '/projects/bfel/mlowery/geo-fno'
+        if args.dataset == 'species_transport'
+        else '/projects/bfel/mlowery/geo-fno-new'
+    )
+    data = np.load(os.path.join(legacy_dir, f'{legacy_filename}.npz'))
+    x_grid, y_grid = data['x_grid'], data['y_grid']
+    train_x, test_x = data['x_train'], data['x_test']
+    train_y, test_y = data['y_train'], data['y_test']
+    train_x, train_y = train_x[:ntrain], train_y[:ntrain]
+else:
+    dataset = load_dataset(args.dataset, ntrain, point_count, args.data_root)
+    x_grid = dataset.input_points
+    y_grid = dataset.output_points
+    train_x, test_x = dataset.train_input, dataset.test_input
+    train_y, test_y = dataset.train_output, dataset.test_output
 physical_input_grid = x_grid.copy()
 physical_output_grid = y_grid.copy()
-train_x, test_x = dataset.train_input, dataset.test_input
-train_y, test_y = dataset.train_output, dataset.test_output
 ntest = len(test_x)
 
 if train_x.ndim == 2: train_x = train_x[..., None]
@@ -355,7 +377,7 @@ if args.calc_div:
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, out.shape[-1])
 
 ood_dataset = None
-if args.eval_ood:
+if args.eval_ood and not legacy_filename:
     try:
         ood_dataset = load_ood_dataset(args.dataset, point_count, args.data_root)
     except (FileNotFoundError, KeyError, ValueError) as exc:
@@ -406,5 +428,5 @@ if args.save:
 
     ### saving test output functions for div calc 
     os.makedirs(args.div_folder, exist_ok=True)
-    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': dataset.output_points,
+    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': physical_output_grid,
                                                            'y_preds_test': y_preds_test.cpu().numpy().astype(np.float64)})

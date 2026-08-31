@@ -40,11 +40,13 @@ def build_rbf_fd_gradient(points, order=5):
     for center_idx, center in enumerate(points):
         distances, stencil = tree.query(center, k=stencil_size)
         stencil_points = points[stencil]
-        pairwise = np.linalg.norm(
-            stencil_points[:, None] - stencil_points[None, :], axis=-1
-        )
         scale = distances[-1]
+        if not np.isfinite(scale) or scale <= eps:
+            raise ValueError("RBF-FD stencil contains coincident points")
         local_points = (stencil_points - center) / scale
+        pairwise = np.linalg.norm(
+            local_points[:, None] - local_points[None, :], axis=-1
+        )
         polys = np.prod(
             local_points[:, None, :] ** poly_powers[None, :, :], axis=-1
         )
@@ -55,9 +57,10 @@ def build_rbf_fd_gradient(points, order=5):
 
         derivative = np.zeros((stencil_size + poly_count, spatial_dim))
         derivative[:stencil_size] = (
-            (center - stencil_points)
+            -local_points
             * rbf_power
             * (pairwise[0, :, None] + eps) ** (rbf_power - 2)
+            / scale
         )
         for axis in range(spatial_dim):
             first_power = np.zeros(spatial_dim, dtype=int)
@@ -151,7 +154,7 @@ parser.add_argument('--div-loss', action='store_true')
 parser.add_argument('--div-loss-weight', type=float, default=1.0)
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
-parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno')
+parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno-new')
 parser.add_argument('--dataset', type=str, default='backward_facing_step', choices=['backward_facing_step',
                                                                                     'buoyancy_cavity_flow', 
                                                                                     'flow_cylinder_laminar', 
@@ -186,12 +189,23 @@ width = args.width
 
 ########## load data ########################################################################
 point_count = None if args.npoints == 'all' else int(args.npoints)
-dataset = load_dataset(args.dataset, ntrain, point_count, args.data_root)
-x_grid = dataset.input_points
-output_grid = dataset.output_points
+legacy_filename = {
+    'taylor_green': 'taylor_green_exact',
+}.get(args.dataset)
+if legacy_filename:
+    data = np.load(os.path.join(args.dir, f'{legacy_filename}.npz'))
+    x_grid = data['x_grid']
+    output_grid = x_grid
+    x_train, x_test = data['x_train'], data['x_test']
+    y_train, y_test = data['y_train'], data['y_test']
+    x_train, y_train = x_train[:ntrain], y_train[:ntrain]
+else:
+    dataset = load_dataset(args.dataset, ntrain, point_count, args.data_root)
+    x_grid = dataset.input_points
+    output_grid = dataset.output_points
+    x_train, x_test = dataset.train_input, dataset.test_input
+    y_train, y_test = dataset.train_output, dataset.test_output
 physical_grid = output_grid.copy()
-x_train, x_test = dataset.train_input, dataset.test_input
-y_train, y_test = dataset.train_output, dataset.test_output
 ntest = len(x_test)
 
 ### norm rect domain to [0,1]^2
@@ -323,7 +337,7 @@ if args.calc_div:
             y_preds_test.append(out)
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, 2)
 
-if args.eval_ood:
+if args.eval_ood and not legacy_filename:
     ood_grid, ood_output_grid, ood_x, ood_y = load_ood_dataset(
         args.dataset, point_count, args.data_root
     )
@@ -364,5 +378,5 @@ if args.save:
 
     ### saving test output functions for div calc 
     os.makedirs(args.div_folder, exist_ok=True)
-    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': dataset.output_points,
+    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': physical_grid,
                                                                     'y_preds_test': y_preds_test.cpu().numpy().astype(np.float64)})

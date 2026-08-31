@@ -14,7 +14,6 @@ import scipy
 from itertools import product
 from scipy.linalg import lstsq
 from scipy.spatial import cKDTree
-from ram_dataset_loader import load_dataset, load_ood_dataset
 
 
 def build_rbf_fd_gradient(points, order=5):
@@ -40,11 +39,13 @@ def build_rbf_fd_gradient(points, order=5):
     for center_idx, center in enumerate(points):
         distances, stencil = tree.query(center, k=stencil_size)
         stencil_points = points[stencil]
-        pairwise = np.linalg.norm(
-            stencil_points[:, None] - stencil_points[None, :], axis=-1
-        )
         scale = distances[-1]
+        if not np.isfinite(scale) or scale <= eps:
+            raise ValueError("RBF-FD stencil contains coincident points")
         local_points = (stencil_points - center) / scale
+        pairwise = np.linalg.norm(
+            local_points[:, None] - local_points[None, :], axis=-1
+        )
         polys = np.prod(
             local_points[:, None, :] ** poly_powers[None, :, :], axis=-1
         )
@@ -55,9 +56,10 @@ def build_rbf_fd_gradient(points, order=5):
 
         derivative = np.zeros((stencil_size + poly_count, spatial_dim))
         derivative[:stencil_size] = (
-            (center - stencil_points)
+            -local_points
             * rbf_power
             * (pairwise[0, :, None] + eps) ** (rbf_power - 2)
+            / scale
         )
         for axis in range(spatial_dim):
             first_power = np.zeros(spatial_dim, dtype=int)
@@ -139,7 +141,6 @@ parser.add_argument('--lr-phi', type=float, default=1e-4)
 parser.add_argument('--lr-fno', type=float, default=1e-3)
 parser.add_argument('--ntrain', type=int, default=1_000)
 parser.add_argument('--npoints', type=str, default='all')
-parser.add_argument('--data-root', type=str, default='/projects/bgcs/mlowery/ram_dataset')
 parser.add_argument('--epochs', type=int, default=500)
 parser.add_argument('--norm-grid', action='store_true')
 parser.add_argument('--batch-size', type=int, default=20)
@@ -149,12 +150,10 @@ parser.add_argument('--calc-div', action='store_true')
 parser.add_argument('--div-loss', action='store_true')
 parser.add_argument('--div-loss-weight', type=float, default=1.0)
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
-parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno')
+parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno-new')
 parser.add_argument('--project-name', type=str, default='ramansh_specific')
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
 parser.add_argument('--dataset', type=str, default='taylor_green_coeffs', choices=['taylor_green_coeffs'])
-parser.add_argument('--no-ood', dest='eval_ood', action='store_false')
-parser.set_defaults(eval_ood=True)
 
 args = parser.parse_args()
 print(args)
@@ -177,12 +176,11 @@ modes = args.modes
 width = args.width
 
 ########## load data ########################################################################
-point_count = None if args.npoints == 'all' else int(args.npoints)
-dataset = load_dataset(args.dataset, ntrain, point_count, args.data_root)
-x_grid = dataset.input_points
-y_grid = dataset.output_points
-x_train, x_test = dataset.train_input, dataset.test_input
-y_train, y_test = dataset.train_output, dataset.test_output
+data = np.load(os.path.join(args.dir, f'{args.dataset}.npz'))
+x_grid, y_grid = data['x_grid'], data['y_grid']
+x_train, x_test = data['x_train'], data['x_test']
+y_train, y_test = data['y_train'], data['y_test']
+x_train, y_train = x_train[:ntrain], y_train[:ntrain]
 ntest = len(x_test)
 if x_train.ndim == 2: x_train = x_train[..., None]
 if x_test.ndim == 2: x_test = x_test[..., None]
@@ -199,7 +197,7 @@ out_channels = y_train.shape[-1]
 gradient_operators = None
 interior_mask = None
 if args.div_loss:
-    physical_grid = dataset.output_points
+    physical_grid = data['y_grid']
     gradient_operators = tuple(
         operator.cuda() for operator in build_rbf_fd_gradient(physical_grid)
     )
@@ -319,35 +317,6 @@ if args.calc_div:
             y_preds_test.append(out)
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, 2)
 
-if args.eval_ood:
-    ood_x_grid, ood_y_grid, ood_x, ood_y = load_ood_dataset(
-        args.dataset, point_count, args.data_root
-    )
-    ood_x = torch.tensor(ood_x, dtype=torch.float32)
-    ood_y = torch.tensor(ood_y, dtype=torch.float32)
-    if ood_x.ndim == 2:
-        ood_x = ood_x[..., None]
-    ood_x = x_normalizer.encode(ood_x)
-    ood_x_grid = torch.tensor(ood_x_grid, dtype=torch.float32)
-    ood_y_grid = torch.tensor(ood_y_grid, dtype=torch.float32)
-    ood_x_grid = ood_x_grid.unsqueeze(0).repeat(len(ood_x), 1, 1)
-    ood_y_grid = ood_y_grid.unsqueeze(0).repeat(len(ood_x), 1, 1)
-    ood_loader = torch.utils.data.DataLoader(
-        torch.utils.data.TensorDataset(ood_x, ood_x_grid, ood_y, ood_y_grid),
-        batch_size=batch_size, shuffle=False
-    )
-    ood_loss = 0.0
-    with torch.no_grad():
-        for x, x_grid_batch, y, y_grid_batch in ood_loader:
-            x, x_grid_batch = x.cuda(), x_grid_batch.cuda()
-            y, y_grid_batch = y.cuda(), y_grid_batch.cuda()
-            inp = torch.concat((x, x_grid_batch), axis=-1)
-            out = model(inp, code=None, x_in=x_grid_batch, x_out=y_grid_batch, iphi=model_iphi)
-            out = y_normalizer.decode(out)
-            ood_loss += myloss(out.reshape(len(x), -1), y.reshape(len(x), -1)).item()
-    ood_loss /= len(ood_x)
-    wandb.log({f'ood/{args.dataset}': ood_loss}, step=ep)
-
 ### saving model for later use
 if args.save:
     os.makedirs(args.model_folder, exist_ok=True)
@@ -357,5 +326,5 @@ if args.save:
 
     ### saving test output functions for div calc 
     os.makedirs(args.div_folder, exist_ok=True)
-    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': dataset.output_points,
+    scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': data['y_grid'],
                                                                     'y_preds_test': y_preds_test.cpu().numpy().astype(np.float64)})
