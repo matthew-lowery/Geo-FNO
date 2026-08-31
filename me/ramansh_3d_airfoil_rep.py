@@ -12,6 +12,7 @@ import wandb
 import time
 #from calc_div_local_wls_poly import calc_div
 import scipy
+from divergence_metrics import build_rbf_fd_gradient, interior_mask as build_interior_mask, summarize_divergence
 
 def set_seed(seed):    
     torch.manual_seed(seed)
@@ -93,6 +94,11 @@ print(x_grid_train.shape, x_grid_test.shape)
 ### in dimensions and out dimensions
 in_channels = x_grid_train.shape[-1]
 out_channels = y_train.shape[-1]
+gradient_operators = interior_mask = None
+if args.calc_div:
+    physical_grid = data['y_grid'][:, :out_channels]
+    gradient_operators = tuple(o.cuda() for o in build_rbf_fd_gradient(physical_grid))
+    interior_mask = build_interior_mask(physical_grid).cuda()
 
 ### move to torch as the normalizers are written in torch and everything subsequently also
 x_grid_train = torch.tensor(x_grid_train, dtype=torch.float32)
@@ -190,6 +196,7 @@ if args.calc_div:
             out = y_normalizer.decode(out)
             y_preds_test.append(out)
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, 2)
+    wandb.log(summarize_divergence(y_preds_test, gradient_operators, interior_mask), commit=True)
 
 ### saving model for later use
 if args.save:
@@ -202,4 +209,3 @@ if args.save:
     os.makedirs(args.div_folder, exist_ok=True)
     scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': data['x_grid'],
                                                                     'y_preds_test': y_preds_test.cpu().numpy().astype(np.float64)})
-

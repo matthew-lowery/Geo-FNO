@@ -15,6 +15,7 @@ from itertools import product
 from scipy.linalg import lstsq
 from scipy.spatial import cKDTree
 from ram_dataset_loader import load_dataset, load_ood_dataset
+from divergence_metrics import summarize_divergence
 
 
 def build_rbf_fd_gradient(points, order=5):
@@ -274,7 +275,7 @@ out_channels = train_y.shape[-1]
 gradient_operators = None
 interior_mask = None
 div_time_steps = 1
-if args.div_loss:
+if args.div_loss or args.calc_div:
     if is_spacetime or is_spacetime_coeffs:
         div_time_steps = 4
         physical_grid = physical_output_grid.reshape(-1, div_time_steps, 3)[:, 0, :2]
@@ -375,6 +376,9 @@ if args.calc_div:
             out = y_normalizer.decode(out)
             y_preds_test.append(out)
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, out.shape[-1])
+    wandb.log(summarize_divergence(
+        y_preds_test, gradient_operators, interior_mask, div_time_steps
+    ), step=ep)
 
 ood_dataset = None
 if args.eval_ood:
