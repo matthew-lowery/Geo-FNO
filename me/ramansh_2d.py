@@ -337,7 +337,7 @@ if args.calc_div:
             y_preds_test.append(out)
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, 2)
 
-if args.eval_ood and not legacy_filename:
+if args.eval_ood:
     ood_grid, ood_output_grid, ood_x, ood_y = load_ood_dataset(
         args.dataset, point_count, args.data_root
     )

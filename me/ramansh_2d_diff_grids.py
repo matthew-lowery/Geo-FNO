@@ -14,6 +14,7 @@ import scipy
 from itertools import product
 from scipy.linalg import lstsq
 from scipy.spatial import cKDTree
+from ram_dataset_loader import load_ood_dataset
 
 
 def build_rbf_fd_gradient(points, order=5):
@@ -141,6 +142,7 @@ parser.add_argument('--lr-phi', type=float, default=1e-4)
 parser.add_argument('--lr-fno', type=float, default=1e-3)
 parser.add_argument('--ntrain', type=int, default=1_000)
 parser.add_argument('--npoints', type=str, default='all')
+parser.add_argument('--data-root', type=str, default='/projects/bgcs/mlowery/ram_dataset')
 parser.add_argument('--epochs', type=int, default=500)
 parser.add_argument('--norm-grid', action='store_true')
 parser.add_argument('--batch-size', type=int, default=20)
@@ -154,6 +156,8 @@ parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno-n
 parser.add_argument('--project-name', type=str, default='ramansh_specific')
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
 parser.add_argument('--dataset', type=str, default='taylor_green_coeffs', choices=['taylor_green_coeffs'])
+parser.add_argument('--no-ood', dest='eval_ood', action='store_false')
+parser.set_defaults(eval_ood=True)
 
 args = parser.parse_args()
 print(args)
@@ -298,6 +302,39 @@ test_l2 /= ntest
 
 print(ep, 'eval_time:', eval_t2-eval_t1, f'{test_l2=}')
 wandb.log({"test_loss": test_l2, "eval_time": eval_t2 - eval_t1}, step=ep)
+
+if args.eval_ood:
+    point_count = None if args.npoints == 'all' else int(args.npoints)
+    ood_x_grid, ood_y_grid, ood_x, ood_y = load_ood_dataset(
+        args.dataset, point_count, args.data_root
+    )
+    if ood_x.ndim == 2:
+        ood_x = ood_x[..., None]
+    if args.norm_grid:
+        ood_x_grid = (ood_x_grid - x_grid_min) / ((x_grid_max - x_grid_min) + 1e-6)
+        ood_y_grid = (ood_y_grid - y_grid_min) / ((y_grid_max - y_grid_min) + 1e-6)
+    ood_x = x_normalizer.encode(torch.tensor(ood_x, dtype=torch.float32))
+    ood_y = torch.tensor(ood_y, dtype=torch.float32)
+    ood_x_grid = torch.tensor(ood_x_grid, dtype=torch.float32)
+    ood_y_grid = torch.tensor(ood_y_grid, dtype=torch.float32)
+    ood_x_grid = ood_x_grid.unsqueeze(0).repeat(len(ood_x), 1, 1)
+    ood_y_grid = ood_y_grid.unsqueeze(0).repeat(len(ood_x), 1, 1)
+    ood_loader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(ood_x, ood_x_grid, ood_y, ood_y_grid),
+        batch_size=batch_size, shuffle=False
+    )
+    ood_loss = 0.0
+    with torch.no_grad():
+        for x, x_grid, y, y_grid in ood_loader:
+            x, x_grid = x.cuda(), x_grid.cuda()
+            y, y_grid = y.cuda(), y_grid.cuda()
+            inp = torch.concat((x, x_grid), axis=-1)
+            out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi)
+            out = torch.linalg.norm(y_normalizer.decode(out), dim=-1)
+            y = torch.linalg.norm(y, dim=-1)
+            ood_loss += myloss(out.reshape(len(x), -1), y.reshape(len(x), -1)).item()
+    ood_loss /= len(ood_x)
+    wandb.log({f'ood/{args.dataset}': ood_loss}, step=ep)
 
 
 t2 = time.perf_counter()

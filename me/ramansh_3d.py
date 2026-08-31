@@ -377,11 +377,8 @@ if args.calc_div:
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, out.shape[-1])
 
 ood_dataset = None
-if args.eval_ood and not legacy_filename:
-    try:
-        ood_dataset = load_ood_dataset(args.dataset, point_count, args.data_root)
-    except (FileNotFoundError, KeyError, ValueError) as exc:
-        print(f'OOD unavailable: {exc}')
+if args.eval_ood:
+    ood_dataset = load_ood_dataset(args.dataset, point_count, args.data_root)
 
 if ood_dataset is not None:
     ood_x_grid, ood_y_grid, ood_x, ood_y = ood_dataset
@@ -391,11 +388,13 @@ if ood_dataset is not None:
         ood_x = ood_x[..., None]
     ood_x = x_normalizer.encode(ood_x)
     if args.norm_grid:
-        if args.dataset.startswith('taylor_green'):
+        if is_spacetime:
             ood_x_grid = ood_x_grid.copy()
             ood_y_grid = ood_y_grid.copy()
             ood_x_grid[:, :2] = (ood_x_grid[:, :2] - grid_min[:, :2]) / (grid_max[:, :2] - grid_min[:, :2])
             ood_y_grid[:, :2] = (ood_y_grid[:, :2] - grid_min[:, :2]) / (grid_max[:, :2] - grid_min[:, :2])
+        elif is_spacetime_coeffs:
+            ood_y_grid = (ood_y_grid - grid_min) / (grid_max - grid_min)
         else:
             ood_x_grid = (ood_x_grid - grid_min) / (grid_max - grid_min)
             ood_y_grid = (ood_y_grid - grid_min) / (grid_max - grid_min)
