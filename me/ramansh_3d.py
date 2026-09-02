@@ -150,6 +150,8 @@ parser.add_argument('--batch-size', type=int, default=20)
 parser.add_argument('--wandb', action='store_true')
 parser.add_argument('--save', action='store_true')
 parser.add_argument('--calc-div', action='store_true')
+parser.add_argument('--div-order', type=int, default=2,
+                    help='RBF-FD polynomial order for divergence')
 parser.add_argument('--div-loss', action='store_true')
 parser.add_argument('--div-loss-weight', type=float, default=1.0)
 parser.add_argument('--project-name', type=str, default='ramansh')
@@ -284,7 +286,8 @@ if args.div_loss or args.calc_div:
     else:
         physical_grid = physical_output_grid[:, :out_channels]
     gradient_operators = tuple(
-        operator.cuda() for operator in build_rbf_fd_gradient(physical_grid)
+        operator.cuda()
+        for operator in build_rbf_fd_gradient(physical_grid, order=args.div_order)
     )
     interior_mask = build_interior_mask(
         physical_grid, cylindrical=args.dataset == 'species_transport'

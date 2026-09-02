@@ -42,6 +42,8 @@ parser.add_argument('--project-name', type=str, default='ramansh')
 parser.add_argument('--wandb', action='store_true')
 parser.add_argument('--save', action='store_true')
 parser.add_argument('--calc-div', action='store_true')
+parser.add_argument('--div-order', type=int, default=2,
+                    help='RBF-FD polynomial order for divergence')
 parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno')
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
@@ -97,7 +99,10 @@ out_channels = y_train.shape[-1]
 gradient_operators = interior_mask = None
 if args.calc_div:
     physical_grid = data['y_grid'][:, :out_channels]
-    gradient_operators = tuple(o.cuda() for o in build_rbf_fd_gradient(physical_grid))
+    gradient_operators = tuple(
+        o.cuda()
+        for o in build_rbf_fd_gradient(physical_grid, order=args.div_order)
+    )
     interior_mask = build_interior_mask(physical_grid).cuda()
 
 ### move to torch as the normalizers are written in torch and everything subsequently also
