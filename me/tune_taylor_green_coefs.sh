@@ -11,8 +11,8 @@ sp() {
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
-#SBATCH --partition=gpuA100x4,gpuA100x8
-#SBATCH --account=bfel-delta-gpu
+#SBATCH --partition=gpuA100x4
+#SBATCH --account=bgcs-delta-gpu
 #SBATCH --job-name=myjob
 #SBATCH --time=10:00:00
 #SBATCH --constraint="scratch"
@@ -29,18 +29,17 @@ EOF
 ### tune for tgtc and tgc
 dir='/projects/bfel/mlowery/geo-fno-new'
 for res1d in 10 15 20 25 30; do
-sp "python3 ramansh_3d.py --dir=$dir --dataset='taylor_green_time_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --res1d=$res1d --width=32 --modes=$((res1d/2))"
+sp "python3 ramansh_3d.py --data-root=/projects/bgcs/mlowery/ram_dataset --dataset='taylor_green_time_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --res1d=$res1d --width=32 --modes=$((res1d/2))"
 done
 
 for width in 64 128; do
-sp "python3 ramansh_3d.py --dir=$dir --dataset='taylor_green_time_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --width=$width --res1d=15 --modes=7"
+sp "python3 ramansh_3d.py --data-root=/projects/bgcs/mlowery/ram_dataset --dataset='taylor_green_time_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --width=$width --res1d=15 --modes=7"
 done
 
 for res1d in 20 30 40 50 60; do
-sp "python3 ramansh_2d_diff_grids.py --dir=$dir --dataset='taylor_green_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --res1d=$res1d --width=32 --modes=$((res1d/2))"
+sp "python3 ramansh_2d_diff_grids.py --data-root=/projects/bgcs/mlowery/ram_dataset --dataset='taylor_green_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --res1d=$res1d --width=32 --modes=$((res1d/2))"
 done
 
 for width in 64 128; do
-sp "python3 ramansh_2d_diff_grids.py --dir=$dir --dataset='taylor_green_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --width=$width"
+sp "python3 ramansh_2d_diff_grids.py --data-root=/projects/bgcs/mlowery/ram_dataset --dataset='taylor_green_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --width=$width"
 done
-

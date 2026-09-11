@@ -11,8 +11,8 @@ sp() {
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
-#SBATCH --partition=gpuA100x4,gpuA100x8
-#SBATCH --account=bfel-delta-gpu
+#SBATCH --partition=gpuA100x4
+#SBATCH --account=bgcs-delta-gpu
 #SBATCH --job-name=myjob
 #SBATCH --time=$hr:00:00
 #SBATCH --constraint="scratch"
@@ -40,49 +40,49 @@ projname='ramansh_specific'
 #dataset='flow_cylinder_laminar'
 #ntrain=100
 #for seed in 1 2 3; do
-#sp "python3 ramansh_2d.py --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --dir=$dir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=60 --width=128 --modes=24"
+#sp "python3 ramansh_2d.py --data-root=/projects/bgcs/mlowery/ram_dataset --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=60 --width=128 --modes=24"
 #done
 #
 #dataset='flow_cylinder_shedding'
 #ntrain=10000
 #for seed in 1 2 3; do
-#sp "python3 ramansh_2d.py --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --dir=$dir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=60 --width=64 --modes=28"
+#sp "python3 ramansh_2d.py --data-root=/projects/bgcs/mlowery/ram_dataset --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=60 --width=64 --modes=28"
 #done
 #
 #dataset='lid_cavity_flow'
 #ntrain=10000
 #for seed in 1 2 3; do
-#sp "python3 ramansh_2d.py --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --dir=$dir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=20"
+#sp "python3 ramansh_2d.py --data-root=/projects/bgcs/mlowery/ram_dataset --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=20"
 #done
 #
 #dataset='merge_vortices_easier'
 #ntrain=500
 #for seed in 1 2 3; do
-#sp "python3 ramansh_2d.py --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --dir=$dir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=60 --width=128 --modes=12"
+#sp "python3 ramansh_2d.py --data-root=/projects/bgcs/mlowery/ram_dataset --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=60 --width=128 --modes=12"
 #done
 #
 #dataset='buoyancy_cavity_flow'
 #ntrain=10000
 #for seed in 1 2 3; do
-#sp "python3 ramansh_2d.py --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --dir=$dir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=20"
+#sp "python3 ramansh_2d.py --data-root=/projects/bgcs/mlowery/ram_dataset --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=20"
 #done
 #
 #dataset='backward_facing_step_ood'
 #ntrain=500
 #for seed in 1 2 3; do
-#sp "python3 ramansh_2d.py --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --dir=$dir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=12"
+#sp "python3 ramansh_2d.py --data-root=/projects/bgcs/mlowery/ram_dataset --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=12"
 #done
 #
 #dataset='backward_facing_step'
 #ntrain=500
 #for seed in 1 2 3; do
-#sp "python3 ramansh_2d.py --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --dir=$dir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=12"
+#sp "python3 ramansh_2d.py --data-root=/projects/bgcs/mlowery/ram_dataset --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=12"
 #done
 #
 #dataset='taylor_green_exact'
 #ntrain=5000
 #for seed in 1 2 3; do
-#sp "python3 ramansh_2d.py --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --dir=$dir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=50 --width=64 --modes=20"
+#sp "python3 ramansh_2d.py --data-root=/projects/bgcs/mlowery/ram_dataset --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --dataset=$dataset --norm-grid --res1d=50 --width=64 --modes=20"
 #done
 #
 res1d=25
@@ -98,6 +98,5 @@ modes=7
 width=64
 ntrain=500
 for seed in 1 2 3; do
-sp "python3 ramansh_3d.py --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --dir=$dir --calc-div --save --dataset='taylor_green_time' --wandb --seed=$seed --ntrain=$ntrain --norm-grid --res1d=$res1d --width=$width --modes=$modes" 5
+sp "python3 ramansh_3d.py --data-root=/projects/bgcs/mlowery/ram_dataset --project-name=$projname --div-folder=$divdir --model-folder=$modeldir --calc-div --save --dataset='taylor_green_time' --wandb --seed=$seed --ntrain=$ntrain --norm-grid --res1d=$res1d --width=$width --modes=$modes" 5
 done
-

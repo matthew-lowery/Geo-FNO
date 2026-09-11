@@ -14,8 +14,9 @@ import scipy
 from itertools import product
 from scipy.linalg import lstsq
 from scipy.spatial import cKDTree
-from ram_dataset_loader import load_dataset, load_ood_dataset
+from ram_dataset_loader import DEFAULT_DATA_ROOT, load_dataset, try_load_ood_dataset
 from divergence_metrics import summarize_divergence
+from dataset_boundaries import divergence_interior_mask
 
 
 def build_rbf_fd_gradient(points, order=2):
@@ -87,29 +88,6 @@ def build_rbf_fd_gradient(points, order=2):
     )
 
 
-def build_interior_mask(points, cylindrical=False):
-    points = np.asarray(points)
-    if cylindrical:
-        radius = np.linalg.norm(points[:, :2], axis=1)
-        boundary = (
-            (points[:, 2] == points[:, 2].min())
-            | (points[:, 2] == points[:, 2].max())
-            | np.isclose(radius, radius.max())
-        )
-    else:
-        spans = np.ptp(points, axis=0)
-        active_axes = spans > 100 * np.finfo(points.dtype).eps
-        active_points = points[:, active_axes]
-        boundary = np.any(
-            (active_points == active_points.min(axis=0))
-            | (active_points == active_points.max(axis=0)),
-            axis=1,
-        )
-    if boundary.all():
-        raise ValueError("Divergence loss has no interior points")
-    return torch.tensor(~boundary, dtype=torch.bool)
-
-
 def divergence_loss(vector_field, gradient_operators, interior_mask, time_steps=1):
     batch_size, _, vector_dim = vector_field.shape
     vector_field = vector_field.reshape(
@@ -143,7 +121,7 @@ parser.add_argument('--lr-phi', type=float, default=1e-4)
 parser.add_argument('--lr-fno', type=float, default=1e-3)
 parser.add_argument('--ntrain', type=int, default=1_000)
 parser.add_argument('--npoints', type=str, default='all')
-parser.add_argument('--data-root', type=str, default='/projects/bgcs/mlowery/ram_dataset')
+parser.add_argument('--data-root', '--dir', dest='data_root', type=str, default=str(DEFAULT_DATA_ROOT))
 parser.add_argument('--epochs', type=int, default=500)
 parser.add_argument('--norm-grid', action='store_true')
 parser.add_argument('--batch-size', type=int, default=20)
@@ -157,14 +135,13 @@ parser.add_argument('--div-loss', action='store_true')
 parser.add_argument('--div-loss-weight', type=float, default=1.0)
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
-parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno-new')
 parser.add_argument('--dataset', type=str, default='backward_facing_step', choices=['backward_facing_step',
                                                                                     'buoyancy_cavity_flow', 
                                                                                     'flow_cylinder_laminar', 
                                                                                     'flow_cylinder_shedding', 
                                                                                     'lid_cavity_flow', 
                                                                                     "merge_vortices_easier",
-                                                                                    "taylor_green"
+                                                                                    "taylor_green", "taylor_green_exact"
                                                                                     ])
 parser.add_argument('--no-ood', dest='eval_ood', action='store_false')
 parser.set_defaults(eval_ood=True)
@@ -175,7 +152,6 @@ print(args)
 name = f"{args.dataset}_{args.seed}_{args.ntrain}_{args.npoints}"
 if not args.wandb:
     os.environ["WANDB_MODE"] = "disabled"
-wandb.login(key='d612cda26a5690e196d092756d668fc2aee8525b')
 wandb.init(project=args.project_name, name=f'{name}')
 wandb.config.update(args)
 
@@ -192,22 +168,11 @@ width = args.width
 
 ########## load data ########################################################################
 point_count = None if args.npoints == 'all' else int(args.npoints)
-legacy_filename = {
-    'taylor_green': 'taylor_green_exact',
-}.get(args.dataset)
-if legacy_filename:
-    data = np.load(os.path.join(args.dir, f'{legacy_filename}.npz'))
-    x_grid = data['x_grid']
-    output_grid = x_grid
-    x_train, x_test = data['x_train'], data['x_test']
-    y_train, y_test = data['y_train'], data['y_test']
-    x_train, y_train = x_train[:ntrain], y_train[:ntrain]
-else:
-    dataset = load_dataset(args.dataset, ntrain, point_count, args.data_root)
-    x_grid = dataset.input_points
-    output_grid = dataset.output_points
-    x_train, x_test = dataset.train_input, dataset.test_input
-    y_train, y_test = dataset.train_output, dataset.test_output
+dataset = load_dataset(args.dataset, ntrain, point_count, args.data_root)
+x_grid = dataset.input_points
+output_grid = dataset.output_points
+x_train, x_test = dataset.train_input, dataset.test_input
+y_train, y_test = dataset.train_output, dataset.test_output
 physical_grid = output_grid.copy()
 ntest = len(x_test)
 
@@ -227,7 +192,7 @@ if args.div_loss or args.calc_div:
         operator.cuda()
         for operator in build_rbf_fd_gradient(physical_grid, order=args.div_order)
     )
-    interior_mask = build_interior_mask(physical_grid).cuda()
+    interior_mask = divergence_interior_mask(physical_grid, args.dataset, args.data_root).cuda()
 
 ### move to torch as the normalizers are written in torch and everything subsequently also
 x_train = torch.tensor(x_train, dtype=torch.float32)
@@ -342,10 +307,14 @@ if args.calc_div:
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, 2)
     wandb.log(summarize_divergence(y_preds_test, gradient_operators, interior_mask), step=ep)
 
+ood_dataset = None
 if args.eval_ood:
-    ood_grid, ood_output_grid, ood_x, ood_y = load_ood_dataset(
+    ood_dataset = try_load_ood_dataset(
         args.dataset, point_count, args.data_root
     )
+    wandb.log({'ood_available': ood_dataset is not None})
+if ood_dataset is not None:
+    ood_grid, ood_output_grid, ood_x, ood_y = ood_dataset
     ood_x = torch.tensor(ood_x, dtype=torch.float32)
     ood_y = torch.tensor(ood_y, dtype=torch.float32)
     if ood_x.ndim == 2:

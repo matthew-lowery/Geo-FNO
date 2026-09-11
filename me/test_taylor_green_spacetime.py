@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import torch
@@ -8,6 +9,7 @@ from scipy.io import savemat
 
 from model_3d import FNO3d, IPHI
 from ram_dataset_loader import TIME_LEVELS, load_dataset, load_ood_dataset
+import ram_dataset_loader
 
 
 def write_taylor_green_data(root):
@@ -35,7 +37,7 @@ def write_taylor_green_data(root):
         )
     savemat(problem_dir / "data_time.mat", data)
     savemat(
-        problem_dir / "data_coeffs.mat",
+        problem_dir / "data_coeffs_matt.mat",
         {"init_coeffs": np.column_stack((viscosity, amplitude))},
     )
     savemat(problem_dir / "data_time_ood.mat", data)
@@ -43,6 +45,14 @@ def write_taylor_green_data(root):
 
 class TaylorGreenSpacetimeSmokeTest(unittest.TestCase):
     def setUp(self):
+        counts = patch.dict(ram_dataset_loader.TRAIN_SAMPLE_COUNTS, {
+            "taylor_green_time": 6, "taylor_green_time_coeffs": 6,
+        })
+        counts.start()
+        self.addCleanup(counts.stop)
+        test_count = patch.object(ram_dataset_loader, "N_TEST", 2)
+        test_count.start()
+        self.addCleanup(test_count.stop)
         self.temp_dir = tempfile.TemporaryDirectory()
         write_taylor_green_data(self.temp_dir.name)
 

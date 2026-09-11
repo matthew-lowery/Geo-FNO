@@ -12,7 +12,7 @@ sp() {
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
 #SBATCH --partition=gpuA100x4
-#SBATCH --account=bfel-delta-gpu
+#SBATCH --account=bgcs-delta-gpu
 #SBATCH --job-name=myjob
 #SBATCH --time=$hr:00:00
 #SBATCH --constraint="scratch"
@@ -33,7 +33,7 @@ modes=10
 width=64
 for seed in 1 2 3; do
 for ntrain in 10000; do
-sp "python3 ramansh_3d.py --calc-div --save --batch-size=20 --dataset='species_transport' --wandb --seed=$seed --width=$width --ntrain=$ntrain --norm-grid --res1d=20 --modes=10" 30
+sp "python3 ramansh_3d.py --data-root=/projects/bgcs/mlowery/ram_dataset --calc-div --save --batch-size=20 --dataset='species_transport' --wandb --seed=$seed --width=$width --ntrain=$ntrain --norm-grid --res1d=20 --modes=10" 30
 done
 done
 #
@@ -43,7 +43,7 @@ done
 #width=64
 #for seed in 1 2 3; do
 #for ntrain in 5000 7000 10000; do
-#sp "python3 ramansh_3d.py --calc-div --save --dataset='taylor_green_time' --wandb --seed=$seed --ntrain=$ntrain --norm-grid --res1d=$res1d --width=$width --modes=$modes"
+#sp "python3 ramansh_3d.py --data-root=/projects/bgcs/mlowery/ram_dataset --calc-div --save --dataset='taylor_green_time' --wandb --seed=$seed --ntrain=$ntrain --norm-grid --res1d=$res1d --width=$width --modes=$modes"
 #done
 #done
 #

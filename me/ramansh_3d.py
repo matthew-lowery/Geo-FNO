@@ -14,8 +14,9 @@ import scipy
 from itertools import product
 from scipy.linalg import lstsq
 from scipy.spatial import cKDTree
-from ram_dataset_loader import load_dataset, load_ood_dataset
+from ram_dataset_loader import DEFAULT_DATA_ROOT, load_dataset, try_load_ood_dataset
 from divergence_metrics import summarize_divergence
+from dataset_boundaries import divergence_interior_mask
 
 
 def build_rbf_fd_gradient(points, order=2):
@@ -87,29 +88,6 @@ def build_rbf_fd_gradient(points, order=2):
     )
 
 
-def build_interior_mask(points, cylindrical=False):
-    points = np.asarray(points)
-    if cylindrical:
-        radius = np.linalg.norm(points[:, :2], axis=1)
-        boundary = (
-            (points[:, 2] == points[:, 2].min())
-            | (points[:, 2] == points[:, 2].max())
-            | np.isclose(radius, radius.max())
-        )
-    else:
-        spans = np.ptp(points, axis=0)
-        active_axes = spans > 100 * np.finfo(points.dtype).eps
-        active_points = points[:, active_axes]
-        boundary = np.any(
-            (active_points == active_points.min(axis=0))
-            | (active_points == active_points.max(axis=0)),
-            axis=1,
-        )
-    if boundary.all():
-        raise ValueError("Divergence loss has no interior points")
-    return torch.tensor(~boundary, dtype=torch.bool)
-
-
 def divergence_loss(vector_field, gradient_operators, interior_mask, time_steps=1):
     batch_size, _, vector_dim = vector_field.shape
     vector_field = vector_field.reshape(
@@ -143,7 +121,7 @@ parser.add_argument('--lr-phi', type=float, default=1e-4)
 parser.add_argument('--lr-fno', type=float, default=1e-3)
 parser.add_argument('--ntrain', type=int, default=1_000)
 parser.add_argument('--npoints', type=str, default='2700')
-parser.add_argument('--data-root', type=str, default='/projects/bgcs/mlowery/ram_dataset')
+parser.add_argument('--data-root', '--dir', dest='data_root', type=str, default=str(DEFAULT_DATA_ROOT))
 parser.add_argument('--epochs', type=int, default=500)
 parser.add_argument('--norm-grid', action='store_true')
 parser.add_argument('--batch-size', type=int, default=20)
@@ -156,7 +134,6 @@ parser.add_argument('--div-loss', action='store_true')
 parser.add_argument('--div-loss-weight', type=float, default=1.0)
 parser.add_argument('--project-name', type=str, default='ramansh')
 parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
-parser.add_argument('--dir', type=str)
 parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
 parser.add_argument('--dataset', type=str, default='taylor_green_time', choices=['taylor_green_time', 'taylor_green_spacetime', 'species_transport', 'taylor_green_time_coeffs', 'taylor_green_spacetime_coeffs', 'forced_turb'])
 parser.add_argument('--no-ood', dest='eval_ood', action='store_false')
@@ -167,7 +144,6 @@ print(args)
 name = f"{args.dataset}_{args.seed}_{args.ntrain}_{args.npoints}"
 if not args.wandb:
     os.environ["WANDB_MODE"] = "disabled"
-wandb.login(key='d612cda26a5690e196d092756d668fc2aee8525b')
 wandb.init(project=args.project_name, name=f'{name}')
 wandb.config.update(args)
 
@@ -184,30 +160,11 @@ width = args.width
 
 ########### load data ########################################################################
 point_count = None if args.npoints == 'all' else int(args.npoints)
-legacy_filename = {
-    'taylor_green_time': 'taylor_green_time',
-    'taylor_green_spacetime': 'taylor_green_time',
-    'taylor_green_time_coeffs': 'taylor_green_time_coeffs',
-    'taylor_green_spacetime_coeffs': 'taylor_green_time_coeffs',
-    'species_transport': 'species_transport',
-}.get(args.dataset)
-if legacy_filename:
-    legacy_dir = args.dir or (
-        '/projects/bfel/mlowery/geo-fno'
-        if args.dataset == 'species_transport'
-        else '/projects/bfel/mlowery/geo-fno-new'
-    )
-    data = np.load(os.path.join(legacy_dir, f'{legacy_filename}.npz'))
-    x_grid, y_grid = data['x_grid'], data['y_grid']
-    train_x, test_x = data['x_train'], data['x_test']
-    train_y, test_y = data['y_train'], data['y_test']
-    train_x, train_y = train_x[:ntrain], train_y[:ntrain]
-else:
-    dataset = load_dataset(args.dataset, ntrain, point_count, args.data_root)
-    x_grid = dataset.input_points
-    y_grid = dataset.output_points
-    train_x, test_x = dataset.train_input, dataset.test_input
-    train_y, test_y = dataset.train_output, dataset.test_output
+dataset = load_dataset(args.dataset, ntrain, point_count, args.data_root)
+x_grid = dataset.input_points
+y_grid = dataset.output_points
+train_x, test_x = dataset.train_input, dataset.test_input
+train_y, test_y = dataset.train_output, dataset.test_output
 physical_input_grid = x_grid.copy()
 physical_output_grid = y_grid.copy()
 ntest = len(test_x)
@@ -218,7 +175,7 @@ if test_x.ndim == 2: test_x = test_x[..., None]
 ### basically norm domain to \in [0,1]^d
 is_spacetime = args.dataset in {'taylor_green_time', 'taylor_green_spacetime'}
 is_spacetime_coeffs = args.dataset in {'taylor_green_time_coeffs', 'taylor_green_spacetime_coeffs'}
-if is_spacetime:
+if args.norm_grid and is_spacetime:
     xs = x_grid_spatial = x_grid[:,:2] ## t is already in [0,1]
     ys = y_grid[:,:2]
     grid_min, grid_max = np.min(xs, axis=0, keepdims=True), np.max(xs, axis=0, keepdims=True)
@@ -226,12 +183,12 @@ if is_spacetime:
     ys_norm = (ys - grid_min) / (grid_max - grid_min)
     x_grid[:,:2] = xs_norm
     y_grid[:,:2] = ys_norm
-elif args.dataset == 'species_transport':
+elif args.norm_grid and args.dataset == 'species_transport':
     ## x_grid is a subset of y_grid so norm with y_grid
     grid_min, grid_max = np.min(y_grid, axis=0, keepdims=True), np.max(y_grid, axis=0, keepdims=True)
     x_grid = (x_grid - grid_min) / (grid_max - grid_min)
     y_grid = (y_grid - grid_min) / (grid_max - grid_min)
-elif is_spacetime_coeffs:
+elif args.norm_grid and is_spacetime_coeffs:
     grid_min = np.min(y_grid, axis=0, keepdims=True)
     grid_max = np.max(y_grid, axis=0, keepdims=True)
     y_grid = (y_grid - grid_min) / (grid_max - grid_min)
@@ -289,9 +246,7 @@ if args.div_loss or args.calc_div:
         operator.cuda()
         for operator in build_rbf_fd_gradient(physical_grid, order=args.div_order)
     )
-    interior_mask = build_interior_mask(
-        physical_grid, cylindrical=args.dataset == 'species_transport'
-    ).cuda()
+    interior_mask = divergence_interior_mask(physical_grid, args.dataset, args.data_root).cuda()
 
 model = FNO3d(modes, width, in_channels=in_channels, out_channels=out_channels, is_mesh=False, s1=args.res1d, s2=args.res1d, s3=args.res1d).cuda()
 model_iphi = IPHI().cuda()
@@ -385,7 +340,8 @@ if args.calc_div:
 
 ood_dataset = None
 if args.eval_ood:
-    ood_dataset = load_ood_dataset(args.dataset, point_count, args.data_root)
+    ood_dataset = try_load_ood_dataset(args.dataset, point_count, args.data_root)
+    wandb.log({'ood_available': ood_dataset is not None})
 
 if ood_dataset is not None:
     ood_x_grid, ood_y_grid, ood_x, ood_y = ood_dataset

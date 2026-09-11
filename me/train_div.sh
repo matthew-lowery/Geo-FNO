@@ -1,81 +1,130 @@
 #!/bin/bash
-
 set -euo pipefail
 
-sp() {
-    local pycmd="$1"
-    local hours="$2"
-    local job_name="$3"
+ME_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+DATA_ROOT="${RAM_DATA_ROOT:-$ME_DIR/../../ram_dataset}"
+if [[ -z "${RAM_DATA_ROOT:-}" && -d /projects/bgcs/mlowery/ram_dataset ]]; then
+    DATA_ROOT=/projects/bgcs/mlowery/ram_dataset
+fi
+RESULTS_ROOT="${RAM_RESULTS_ROOT:-/projects/bfel/mlowery/operator-benchmarks}"
+PYTHON="${TRAIN_PYTHON:-/u/mlowery/.conda/envs/gnot/bin/python}"
+mode=dry-run
+phase_filter=all
+model_filter=all
+jobs=0
 
-    sbatch <<EOF
-#!/bin/bash
-#SBATCH --mem=16g
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=1
-#SBATCH --partition=gpuA100x4
-#SBATCH --account=bgcs-delta-gpu
-#SBATCH --job-name=$job_name
-#SBATCH --time=${hours}:00:00
-#SBATCH --constraint="scratch"
-#SBATCH --gpus-per-node=1
-#SBATCH --output=./out/%x_%A.out
-#SBATCH --error=./err/%x_%A.err
-
-module purge
-export PATH=/u/mlowery/.conda/envs/gnot/bin:\$PATH
-cd /u/mlowery/Geo-FNO/me/
-$pycmd
-EOF
+usage() {
+    echo "Usage: bash train_div.sh [--dry-run|--submit] [--phase all|div|baseline|forced] [--model all|geo|trans]"
+    echo "Overrides: RAM_DATA_ROOT, RAM_RESULTS_ROOT, TRAIN_PYTHON"
 }
 
-for seed in 1; do
-    div_loss_weight=0.1
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --div-loss --div-loss-weight=$div_loss_weight --seed=$seed --dataset=flow_cylinder_laminar --ntrain=100 --npoints=1000 --res1d=60 --width=128 --modes=24" 2 "div_flow_cylinder_laminar"
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --seed=$seed --dataset=flow_cylinder_laminar --ntrain=100 --npoints=1000 --res1d=60 --width=128 --modes=24" 2 "no_div_flow_cylinder_laminar"
-
-    div_loss_weight=0.001
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --div-loss --div-loss-weight=$div_loss_weight --seed=$seed --dataset=flow_cylinder_shedding --ntrain=10000 --npoints=1000 --res1d=60 --width=64 --modes=28" 4 "div_flow_cylinder_shedding"
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --seed=$seed --dataset=flow_cylinder_shedding --ntrain=10000 --npoints=1000 --res1d=60 --width=64 --modes=28" 4 "no_div_flow_cylinder_shedding"
-
-    div_loss_weight=0.001
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --div-loss --div-loss-weight=$div_loss_weight --seed=$seed --dataset=lid_cavity_flow --ntrain=10000 --npoints=1000 --res1d=40 --width=64 --modes=20" 2 "div_lid_cavity_flow"
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --seed=$seed --dataset=lid_cavity_flow --ntrain=10000 --npoints=1000 --res1d=40 --width=64 --modes=20" 2 "no_div_lid_cavity_flow"
-
-    div_loss_weight=0.1
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --div-loss --div-loss-weight=$div_loss_weight --seed=$seed --dataset=backward_facing_step --ntrain=500 --npoints=1000 --res1d=40 --width=64 --modes=12" 2 "div_backward_facing_step"
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --seed=$seed --dataset=backward_facing_step --ntrain=500 --npoints=1000 --res1d=40 --width=64 --modes=12" 2 "no_div_backward_facing_step"
-
-    div_loss_weight=0.1
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --div-loss --div-loss-weight=$div_loss_weight --seed=$seed --dataset=buoyancy_cavity_flow --ntrain=10000 --npoints=5000 --res1d=40 --width=64 --modes=20" 7 "div_buoyancy_cavity_flow"
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --seed=$seed --dataset=buoyancy_cavity_flow --ntrain=10000 --npoints=5000 --res1d=40 --width=64 --modes=20" 7 "no_div_buoyancy_cavity_flow"
-
-    div_loss_weight=0.01
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/models --dir=/projects/bfel/mlowery/geo-fno-new --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --div-loss --div-loss-weight=$div_loss_weight --seed=$seed --dataset=taylor_green --ntrain=5000 --npoints=500 --res1d=50 --width=64 --modes=20" 2 "div_taylor_green"
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/models --dir=/projects/bfel/mlowery/geo-fno-new --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --seed=$seed --dataset=taylor_green --ntrain=5000 --npoints=500 --res1d=50 --width=64 --modes=20" 2 "no_div_taylor_green"
-
-    div_loss_weight=0.1 # provisional: no Geo-FNO coefficient-map value was supplied
-    sp "python3 ramansh_2d_diff_grids.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/models --dir=/projects/bfel/mlowery/geo-fno-new --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --div-loss --div-loss-weight=$div_loss_weight --seed=$seed --dataset=taylor_green_coeffs --ntrain=5000 --npoints=500 --res1d=50 --width=64 --modes=20" 2 "div_taylor_green_coeffs"
-    sp "python3 ramansh_2d_diff_grids.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/models --dir=/projects/bfel/mlowery/geo-fno-new --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --seed=$seed --dataset=taylor_green_coeffs --ntrain=5000 --npoints=500 --res1d=50 --width=64 --modes=20" 2 "no_div_taylor_green_coeffs"
-
-    div_loss_weight=0.001
-    sp "python3 ramansh_3d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/models --dir=/projects/bfel/mlowery/geo-fno-new --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --div-loss --div-loss-weight=$div_loss_weight --seed=$seed --dataset=taylor_green_spacetime --ntrain=5000 --npoints=500 --res1d=15 --width=64 --modes=7" 2 "div_taylor_green_spacetime"
-    sp "python3 ramansh_3d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/models --dir=/projects/bfel/mlowery/geo-fno-new --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --seed=$seed --dataset=taylor_green_spacetime --ntrain=5000 --npoints=500 --res1d=15 --width=64 --modes=7" 2 "no_div_taylor_green_spacetime"
-
-    div_loss_weight=0.1
-    sp "python3 ramansh_3d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/models --dir=/projects/bfel/mlowery/geo-fno-new --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --div-loss --div-loss-weight=$div_loss_weight --seed=$seed --dataset=taylor_green_spacetime_coeffs --ntrain=5000 --npoints=500 --res1d=15 --width=64 --modes=7" 2 "div_taylor_green_spacetime_coeffs"
-    sp "python3 ramansh_3d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/models --dir=/projects/bfel/mlowery/geo-fno-new --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --seed=$seed --dataset=taylor_green_spacetime_coeffs --ntrain=5000 --npoints=500 --res1d=15 --width=64 --modes=7" 2 "no_div_taylor_green_spacetime_coeffs"
-
-    div_loss_weight=0.001
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --div-loss --div-loss-weight=$div_loss_weight --seed=$seed --dataset=merge_vortices_easier --ntrain=500 --npoints=500 --res1d=60 --width=128 --modes=12" 2 "div_merge_vortices_easier"
-    sp "python3 ramansh_2d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --seed=$seed --dataset=merge_vortices_easier --ntrain=500 --npoints=500 --res1d=60 --width=128 --modes=12" 2 "no_div_merge_vortices_easier"
-
-    div_loss_weight=0.001
-    sp "python3 ramansh_3d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/models --dir=/projects/bfel/mlowery/geo-fno --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --div-loss --div-loss-weight=$div_loss_weight --seed=$seed --dataset=species_transport --ntrain=10000 --npoints=7000 --res1d=20 --width=64 --modes=10" 2 "div_species_transport"
-    sp "python3 ramansh_3d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-0/models --dir=/projects/bfel/mlowery/geo-fno --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --seed=$seed --dataset=species_transport --ntrain=10000 --npoints=7000 --res1d=20 --width=64 --modes=10" 2 "no_div_species_transport"
-
-    ### tune this
-    #sp "python3 ramansh_3d.py --project-name=geo-fno_div_loss --div-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/divs --model-folder=/projects/bfel/mlowery/geo-fno-div-loss/lambda-$div_loss_weight/models --data-root=/projects/bgcs/mlowery/ram_dataset --epochs=500 --batch-size=20 --lr-fno=1e-3 --lr-phi=1e-4 --wandb --calc-div --save --norm-grid --div-loss --div-loss-weight=$div_loss_weight --seed=$seed --dataset=forced_turb --ntrain=10000 --npoints=7000 --res1d=20 --width=64 --modes=10" 2 "div_forced_turb"
-
-
+while (( $# )); do
+    case "$1" in
+        --dry-run) mode=dry-run; shift ;;
+        --submit) mode=submit; shift ;;
+        --phase) phase_filter="${2:?missing phase}"; shift 2 ;;
+        --model) model_filter="${2:?missing model}"; shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        *) usage >&2; exit 2 ;;
+    esac
 done
+case "$phase_filter" in all|div|baseline|forced) ;; *) usage >&2; exit 2 ;; esac
+case "$model_filter" in all|geo|trans) ;; *) usage >&2; exit 2 ;; esac
+
+# dataset, Geo entry, training count, points, Geo hours/batch/resolution/width/modes/order,
+# Transolver hours/width/layers/heads/slices.
+# Transolver forced turbulence has no reference entry: use its 3D species model
+# settings and the 15-hour Geo-FNO forced-turbulence allocation.
+profiles() {
+    cat <<'PROFILES'
+flow_cylinder_laminar ramansh_2d.py 100 1000 2 20 60 128 24 3 3 128 5 8 32
+flow_cylinder_shedding ramansh_2d.py 10000 1000 4 20 60 64 28 3 3 128 5 4 32
+lid_cavity_flow ramansh_2d.py 10000 1000 2 20 40 64 20 3 3 128 5 4 16
+backward_facing_step ramansh_2d.py 500 1000 2 20 40 64 12 3 3 128 5 8 16
+buoyancy_cavity_flow ramansh_2d.py 10000 5000 7 20 40 64 20 3 3 128 5 4 32
+taylor_green ramansh_2d.py 5000 500 2 20 50 64 20 2 3 128 5 4 32
+taylor_green_coeffs ramansh_2d_diff_grids.py 5000 500 2 20 50 64 20 2 3 128 5 4 32
+taylor_green_spacetime ramansh_3d.py 5000 500 2 20 15 64 7 2 3 128 5 4 32
+taylor_green_spacetime_coeffs ramansh_3d.py 5000 500 2 20 15 64 7 2 3 128 5 4 32
+merge_vortices_easier ramansh_2d.py 500 500 2 20 60 128 12 2 3 128 5 8 64
+species_transport ramansh_3d.py 10000 7000 2 20 20 64 10 3 3 128 5 4 32
+forced_turb ramansh_3d.py 10000 7000 15 10 20 64 10 3 15 128 5 4 32
+PROFILES
+}
+
+launch() {
+    local phase="$1" model="$2" seed="$3" coef="$4" size="$5"
+    [[ "$model_filter" == all || "$model_filter" == "$model" ]] || return 0
+    local hours label result_dir
+    local -a command
+    label="${model}_${dataset}_s${seed}_n${size}_l${coef}"
+    result_dir="$RESULTS_ROOT/$model/$phase/lambda-$coef"
+    if [[ "$model" == geo ]]; then
+        hours="$geo_hours"
+        command=("$PYTHON" "$geo_entry" "--batch-size=$geo_batch"
+                 "--lr-fno=1e-3" "--lr-phi=1e-4" "--res1d=$resolution"
+                 "--width=$width" "--modes=$modes" "--div-order=$geo_order")
+    else
+        hours="$trans_hours"
+        command=("$PYTHON" -m transolver.train "--batch-size=20"
+                 "--lr=1e-3" "--weight_decay=1e-5" "--n-hidden=$trans_width"
+                 "--n-layers=$layers" "--n-heads=$heads" "--slice-num=$slices"
+                 "--div-order=4" "--gpu=0")
+    fi
+    command+=("--dataset=$dataset" "--ntrain=$size" "--npoints=$points"
+              "--seed=$seed" "--data-root=$DATA_ROOT" "--epochs=500"
+              "--project-name=${model}_div_loss" "--div-loss-weight=$coef"
+              "--div-folder=$result_dir/divs" "--model-folder=$result_dir/models"
+              --wandb --calc-div --save --norm-grid)
+    if [[ "$phase" == div ]]; then
+        command+=(--div-loss --no-ood)
+    fi
+    jobs=$((jobs + 1))
+    if [[ "$mode" == dry-run ]]; then
+        printf '%s %s %s hours=%s ' "$phase" "$model" "$label" "$hours"
+        printf '%q ' "${command[@]}"
+        printf '\n'
+        return
+    fi
+    {
+        printf '#!/bin/bash\n'
+        printf '#SBATCH --mem=16g\n#SBATCH --nodes=1\n#SBATCH --ntasks-per-node=1\n'
+        printf '#SBATCH --cpus-per-task=1\n#SBATCH --gpus-per-node=1\n'
+        printf '#SBATCH --partition=gpuA100x4\n#SBATCH --account=bgcs-delta-gpu\n'
+        printf '#SBATCH --constraint=scratch\n'
+        printf '#SBATCH --job-name=%s\n#SBATCH --time=%s:00:00\n' "$label" "$hours"
+        printf '#SBATCH --output=%s/out/%%x_%%j.out\n' "$ME_DIR"
+        printf '#SBATCH --error=%s/err/%%x_%%j.err\n' "$ME_DIR"
+        printf 'set -euo pipefail\nmodule purge\ncd %q\n' "$ME_DIR"
+        printf '%q ' "${command[@]}"
+        printf '\n'
+    } | sbatch
+}
+
+if [[ "$mode" == submit ]]; then
+    [[ -d "$DATA_ROOT" ]] || { echo "Dataset root missing: $DATA_ROOT" >&2; exit 1; }
+    [[ -x "$PYTHON" ]] || { echo "Python missing: $PYTHON (set TRAIN_PYTHON)" >&2; exit 1; }
+    command -v sbatch >/dev/null
+    mkdir -p "$ME_DIR/out" "$ME_DIR/err"
+fi
+
+for phase in div baseline forced; do
+    [[ "$phase_filter" == all || "$phase_filter" == "$phase" ]] || continue
+    for seed in 1 2 3; do
+        coefficients=(0)
+        [[ "$phase" != div ]] || coefficients=(0.001 0.01 0.1 1)
+        for coef in "${coefficients[@]}"; do
+            while read -r dataset geo_entry training points geo_hours geo_batch resolution width modes geo_order trans_hours trans_width layers heads slices; do
+                [[ "$phase" != forced || "$dataset" == forced_turb ]] || continue
+                sizes=("$training")
+                [[ "$phase" != forced ]] || sizes=(100 500 1000 5000 7000)
+                for size in "${sizes[@]}"; do
+                    for model in geo trans; do
+                        launch "$phase" "$model" "$seed" "$coef" "$size"
+                    done
+                done
+            done < <(profiles)
+        done
+    done
+done
+echo "$mode: $jobs jobs" >&2

@@ -11,8 +11,8 @@ sp() {
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
-#SBATCH --partition=gpuA100x4,gpuA100x8
-#SBATCH --account=bfel-delta-gpu
+#SBATCH --partition=gpuA100x4
+#SBATCH --account=bgcs-delta-gpu
 #SBATCH --job-name=myjob
 #SBATCH --time=10:00:00
 #SBATCH --constraint="scratch"
@@ -31,7 +31,7 @@ EOF
 #for seed in 1 2 3; do
 #for ntrain in 10000; do
 #for npoints in all; do
-#sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=60 --width=128 --modes=12"
+#sp "python3 ramansh_2d.py --data-root=/projects/bgcs/mlowery/ram_dataset --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=60 --width=128 --modes=12"
 #done
 #done
 #done
@@ -41,9 +41,8 @@ dataset='backward_facing_step_ood'
 for seed in 1 2 3; do
 for ntrain in 100 500 1000 5000 7000 10000; do
 for npoints in all; do
-sp "python3 ramansh_2d.py --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=12"
+sp "python3 ramansh_2d.py --data-root=/projects/bgcs/mlowery/ram_dataset --wandb --calc-div --save --seed=$seed --ntrain=$ntrain --npoints=$npoints --dataset=$dataset --norm-grid --res1d=40 --width=64 --modes=12"
 done
 done
 done
-
 
