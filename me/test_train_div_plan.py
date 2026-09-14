@@ -1,15 +1,34 @@
 import collections
+import os
 import shlex
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
+from ram_dataset_loader import required_dataset_paths
+
 
 class TrainingPlanTest(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.root = Path(self.folder.name) / "ram_dataset"
+        self.problems = ["flow_cylinder_laminar", "flow_cylinder_shedding", "lid_cavity_flow",
+                         "backward_facing_step", "buoyancy_cavity_flow", "taylor_green",
+                         "taylor_green_coeffs", "taylor_green_spacetime", "taylor_green_spacetime_coeffs",
+                         "merge_vortices_easier", "species_transport", "forced_turb"]
+        for problem in self.problems:
+            for ood in (False, True):
+                for path in required_dataset_paths(problem, self.root, ood):
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.touch()
+
     def plan(self, *args):
         result = subprocess.run(
             ["bash", str(Path(__file__).with_name("train_div.sh")), "--dry-run", *args],
             check=True, capture_output=True, text=True,
+            env={**os.environ, "RAM_DATA_ROOT": str(self.root)},
         )
         jobs = []
         for line in result.stdout.splitlines():
@@ -65,6 +84,33 @@ class TrainingPlanTest(unittest.TestCase):
     def test_remaining_dataset_filter(self):
         jobs = self.plan("--remaining", "--dataset", "forced_turb", "--phase", "forced")
         self.assertEqual(len(jobs), 30)
+
+    def test_missing_ood_skips_only_baselines(self):
+        path = self.root / "buoyancy_cavity_flow/data_ood.mat"
+        path.rename(path.with_suffix(".unavailable"))
+        jobs = self.plan("--remaining")
+        self.assertEqual(len(jobs), 78)
+        buoyancy = [j for j in jobs if j[5]["dataset"] == "buoyancy_cavity_flow"]
+        self.assertEqual(len(buoyancy), 12)
+        self.assertTrue(all(j[0] == "div" and j[1] == "trans" for j in buoyancy))
+
+    def test_missing_training_file_skips_all_affected_runs(self):
+        for problem in self.problems:
+            with self.subTest(problem=problem):
+                path = required_dataset_paths(problem, self.root)[0]
+                backup = path.with_suffix(".unavailable")
+                path.rename(backup)
+                try:
+                    self.assertEqual(self.plan("--dataset", problem), [])
+                finally:
+                    backup.rename(path)
+
+    def test_spacetime_coefficients_need_both_files(self):
+        path = self.root / "taylor_green/data_coeffs_ood.mat"
+        path.rename(path.with_suffix(".unavailable"))
+        jobs = self.plan("--dataset", "taylor_green_spacetime_coeffs")
+        self.assertEqual(len(jobs), 24)
+        self.assertTrue(all(j[0] == "div" for j in jobs))
 
     def test_reference_hyperparameters_and_hours(self):
         jobs = self.plan("--phase", "baseline")

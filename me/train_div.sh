@@ -65,6 +65,35 @@ forced_turb ramansh_3d.py 10000 7000 36 10 20 64 10 3 24 128 5 4 32
 PROFILES
 }
 
+data_files_exist() {
+    local phase="$1" model="$2" suffix directory filename path
+    local -a required
+    for suffix in '' _ood; do
+        [[ "$phase" != div || -z "$suffix" ]] || continue
+        directory="$dataset"
+        filename="data${suffix}.mat"
+        case "$dataset" in
+            flow_cylinder_laminar) directory=flow_cylinder; filename="data_laminar${suffix}.mat" ;;
+            flow_cylinder_shedding) directory=flow_cylinder; filename="data_shedding${suffix}.mat" ;;
+            taylor_green) directory=taylor_green; filename="data_ood.mat"; [[ -n "$suffix" ]] || filename=data_exact_matt.mat ;;
+            taylor_green_coeffs) directory=taylor_green; filename="data_coeffs_ood.mat"; [[ -n "$suffix" ]] || filename=data_coeffs_matt.mat ;;
+            taylor_green_spacetime*) directory=taylor_green; filename="data_time${suffix}.mat" ;;
+        esac
+        required=("$DATA_ROOT/$directory/$filename")
+        if [[ "$dataset" == taylor_green_spacetime_coeffs ]]; then
+            filename=data_coeffs_ood.mat
+            [[ -n "$suffix" ]] || filename=data_coeffs_matt.mat
+            required+=("$DATA_ROOT/taylor_green/$filename")
+        fi
+        for path in "${required[@]}"; do
+            if [[ ! -f "$path" ]]; then
+                echo "Skip $phase $model $dataset seed=$seed ntrain=$size lambda=$coef: missing $path" >&2
+                return 1
+            fi
+        done
+    done
+}
+
 launch() {
     local phase="$1" model="$2" seed="$3" coef="$4" size="$5"
     [[ "$model_filter" == all || "$model_filter" == "$model" ]] || return 0
@@ -77,6 +106,7 @@ launch() {
             *) return 0 ;;
         esac
     fi
+    data_files_exist "$phase" "$model" || return 0
     local hours label result_dir
     local -a command
     label="${model}_${dataset}_s${seed}_n${size}_l${coef}"
@@ -104,7 +134,7 @@ launch() {
               --wandb --calc-div --save --norm-grid)
     if [[ "$phase" == div ]]; then
         command+=(--div-loss --no-ood)
-    elif [[ "$remaining" == true ]]; then
+    else
         command+=(--require-ood)
     fi
     jobs=$((jobs + 1))

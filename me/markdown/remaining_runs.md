@@ -1,6 +1,6 @@
 # Remaining runs and OOD recovery safeguards
 
-## Requested jobs
+## Requested jobs before file-availability filtering
 
 Run from `Geo-FNO/me`. Every configuration uses seeds 1, 2, 3 and 500 epochs. The divergence coefficient is $\lambda$, multiplying the existing interior mean-square divergence penalty; its sweep is $\lambda\in\{0.001,0.01,0.1,1\}$. No-div runs have $\lambda=0$ and require OOD data.
 
@@ -12,7 +12,7 @@ Run from `Geo-FNO/me`. Every configuration uses seeds 1, 2, 3 and 500 epochs. Th
 | Buoyancy cavity, Geo no-div; Trans div + no-div | 3 | 15 | 10000 | 5000 | 8 / 8 |
 | Total | 36 | 48 | | | |
 
-The 84-job rerun excludes species div training and Geo-FNO buoyancy div training. Div runs disable OOD; all baselines and the size sweep enable it. Architecture, learning rates, batch sizes, dataset splitting, and divergence orders remain those in `train_div.sh`.
+The maximum 84-job rerun excludes species div training and Geo-FNO buoyancy div training. Both launchers skip cases whose required MATLAB files are absent: missing training data skips all affected cases; missing OOD data skips the no-div/OOD cases but retains div training. Each skip prints its missing path. With the current local files, 78 jobs remain: the six buoyancy baselines are skipped, while its 12 Transolver div runs remain. Architecture, learning rates, batch sizes, dataset splitting, and divergence orders are unchanged.
 
 Measured epoch times imply approximately 22.5 hours for Geo-FNO species, 7.2 hours for Transolver species, and 4.6 hours for Transolver buoyancy, before extra evaluation overhead. Forced-turbulence allocations are conservative estimates, not measured full-size runtimes for this batch. The size-sweep allocation scales with training count and includes an extra hour. All allocations are within Delta's documented [48-hour gpuA100x4 limit](https://docs.ncsa.illinois.edu/systems/delta/en/latest/user_guide/running_jobs.html).
 
@@ -34,7 +34,7 @@ Do not submit the same pilot again with the full sweep unless intentionally repe
 
 The default new result root is `/projects/bfel/mlowery/operator-benchmarks/rerun-20260914`, separate from the previous batch. Override with `RAM_RESULTS_ROOT`. `RAM_DATA_ROOT` selects the MATLAB dataset root; `TRAIN_PYTHON` selects the interpreter. Job names start with `rerun_`; output/error files go to `me/out` and `me/err`. Jobs request one A100, 32 GB host memory, partition `gpuA100x4`, account `bgcs-delta-gpu`.
 
-**Required before buoyancy baseline submission:** `ram_dataset/buoyancy_cavity_flow/data_ood.mat`. It was missing in the previous runs and remains absent locally. The launcher will refuse the full selected submission if this file is missing on the submission host. Other datasets can be submitted separately; Transolver buoyancy div-only jobs do not require this OOD file.
+`ram_dataset/buoyancy_cavity_flow/data_ood.mat` remains absent locally, so neither model's buoyancy baseline is scheduled. No replacement OOD dataset is inferred. Transolver buoyancy div jobs still run using the available training file. `--check` validates only retained jobs; an entirely skipped selection submits nothing and exits successfully. A malformed existing file or a file disappearing after selection remains an error.
 
 Geo-FNO buoyancy must be retrained as a no-div baseline because the old saved checkpoint omitted its trained coordinate map. An old FNO-only checkpoint cannot reproduce the trained predictor. With a complete new checkpoint, the training CLI supports `--resume PATH --eval-only` using matching model/dataset arguments, to repeat evaluation without optimizer steps.
 
@@ -57,6 +57,6 @@ For precision, let $\widehat u_i$ and $u_i$ be predicted and target arrays for e
 
 ## Verification and limits
 
-32 regression tests cover monotone final logging, local metric persistence, complete checkpoint reload, RNG restoration, incomplete-checkpoint rejection, missing-OOD rejection, the exact 84-job plan, and finite attention at zero raw temperature. Tiny CPU runs exercise all three Geo-FNO entries and Transolver through training, OOD evaluation, checkpointing, and evaluation-only reload. An actual offline W&B run confirms OOD survives in binary history after epoch 499. A one-epoch Transolver CPU run using the real RAM forced-turbulence training/OOD files (two training samples, 128 points, reduced model) also completes with finite OOD loss persisted to JSON.
+Regression tests cover monotone final logging, local metric persistence, complete checkpoint reload, RNG restoration, incomplete-checkpoint rejection, runtime missing-OOD rejection, the complete 84-job plan, file-based skipping, and finite attention at zero raw temperature. Tiny CPU runs exercise all three Geo-FNO entries and Transolver through training, OOD evaluation, checkpointing, and evaluation-only reload. An actual offline W&B run confirms OOD survives in binary history after epoch 499. A one-epoch Transolver CPU run using the real RAM forced-turbulence training/OOD files (two training samples, 128 points, reduced model) also completes with finite OOD loss persisted to JSON.
 
-The local forced-turbulence and species preflights pass; buoyancy baseline preflight fails on its missing OOD file. No jobs have been submitted, and full-size A100 memory, numerical stability, remote OOD data, and end-to-end wall times remain to be verified on Delta.
+The local remaining-run preflight passes for 78 jobs, omitting missing buoyancy OOD cases. No jobs have been submitted, and full-size A100 memory, numerical stability, remote data availability, and end-to-end wall times remain to be verified on Delta.

@@ -28,7 +28,8 @@ def check_plan(lines):
         if not directory.is_dir() or not os.access(directory, os.W_OK):
             raise PermissionError(f"Result directory is not writable: {directory}")
     if not jobs:
-        raise ValueError("No jobs selected; check dataset/model/phase filters")
+        print("No runnable jobs selected; nothing to submit")
+        return
     missing = sorted(str(p) for p in paths if not p.is_file())
     if missing:
         raise FileNotFoundError("Missing required files; no jobs submitted:\n" + "\n".join(missing))
