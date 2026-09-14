@@ -12,9 +12,14 @@ mode=dry-run
 phase_filter=all
 model_filter=all
 jobs=0
+remaining=false
+dataset_filter=all
+seed_filter=all
+size_filter=all
+original_arguments=("$@")
 
 usage() {
-    echo "Usage: bash train_div.sh [--dry-run|--submit] [--phase all|div|baseline|forced] [--model all|geo|trans]"
+    echo "Usage: bash train_div.sh [--dry-run|--check|--submit] [--remaining] [--dataset NAME] [--seed N] [--ntrain N] [--phase all|div|baseline|forced] [--model all|geo|trans]"
     echo "Overrides: RAM_DATA_ROOT, RAM_RESULTS_ROOT, TRAIN_PYTHON"
 }
 
@@ -22,6 +27,11 @@ while (( $# )); do
     case "$1" in
         --dry-run) mode=dry-run; shift ;;
         --submit) mode=submit; shift ;;
+        --check) mode=check; shift ;;
+        --remaining) remaining=true; shift ;;
+        --dataset) dataset_filter="${2:?missing dataset}"; shift 2 ;;
+        --seed) seed_filter="${2:?missing seed}"; shift 2 ;;
+        --ntrain) size_filter="${2:?missing ntrain}"; shift 2 ;;
         --phase) phase_filter="${2:?missing phase}"; shift 2 ;;
         --model) model_filter="${2:?missing model}"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
@@ -30,34 +40,47 @@ while (( $# )); do
 done
 case "$phase_filter" in all|div|baseline|forced) ;; *) usage >&2; exit 2 ;; esac
 case "$model_filter" in all|geo|trans) ;; *) usage >&2; exit 2 ;; esac
+if [[ "$remaining" == true ]]; then
+    RESULTS_ROOT="${RAM_RESULTS_ROOT:-/projects/bfel/mlowery/operator-benchmarks/rerun-20260914}"
+fi
 
 # dataset, Geo entry, training count, points, Geo hours/batch/resolution/width/modes/order,
 # Transolver hours/width/layers/heads/slices.
 # Transolver forced turbulence has no reference entry: use its 3D species model
-# settings and the 15-hour Geo-FNO forced-turbulence allocation.
+# settings. Longer allocations include headroom beyond measured epoch timings.
 profiles() {
     cat <<'PROFILES'
 flow_cylinder_laminar ramansh_2d.py 100 1000 2 20 60 128 24 3 3 128 5 8 32
 flow_cylinder_shedding ramansh_2d.py 10000 1000 4 20 60 64 28 3 3 128 5 4 32
 lid_cavity_flow ramansh_2d.py 10000 1000 2 20 40 64 20 3 3 128 5 4 16
 backward_facing_step ramansh_2d.py 500 1000 2 20 40 64 12 3 3 128 5 8 16
-buoyancy_cavity_flow ramansh_2d.py 10000 5000 7 20 40 64 20 3 3 128 5 4 32
+buoyancy_cavity_flow ramansh_2d.py 10000 5000 8 20 40 64 20 3 8 128 5 4 32
 taylor_green ramansh_2d.py 5000 500 2 20 50 64 20 2 3 128 5 4 32
 taylor_green_coeffs ramansh_2d_diff_grids.py 5000 500 2 20 50 64 20 2 3 128 5 4 32
 taylor_green_spacetime ramansh_3d.py 5000 500 2 20 15 64 7 2 3 128 5 4 32
 taylor_green_spacetime_coeffs ramansh_3d.py 5000 500 2 20 15 64 7 2 3 128 5 4 32
 merge_vortices_easier ramansh_2d.py 500 500 2 20 60 128 12 2 3 128 5 8 64
-species_transport ramansh_3d.py 10000 7000 2 20 20 64 10 3 3 128 5 4 32
-forced_turb ramansh_3d.py 10000 7000 15 10 20 64 10 3 15 128 5 4 32
+species_transport ramansh_3d.py 10000 7000 32 20 20 64 10 3 12 128 5 4 32
+forced_turb ramansh_3d.py 10000 7000 36 10 20 64 10 3 24 128 5 4 32
 PROFILES
 }
 
 launch() {
     local phase="$1" model="$2" seed="$3" coef="$4" size="$5"
     [[ "$model_filter" == all || "$model_filter" == "$model" ]] || return 0
+    [[ "$dataset_filter" == all || "$dataset_filter" == "$dataset" ]] || return 0
+    [[ "$seed_filter" == all || "$seed_filter" == "$seed" ]] || return 0
+    [[ "$size_filter" == all || "$size_filter" == "$size" ]] || return 0
+    if [[ "$remaining" == true ]]; then
+        case "$dataset:$model:$phase" in
+            forced_turb:*:*|species_transport:*:baseline|buoyancy_cavity_flow:geo:baseline|buoyancy_cavity_flow:trans:div|buoyancy_cavity_flow:trans:baseline) ;;
+            *) return 0 ;;
+        esac
+    fi
     local hours label result_dir
     local -a command
     label="${model}_${dataset}_s${seed}_n${size}_l${coef}"
+    [[ "$remaining" != true ]] || label="rerun_${label}"
     result_dir="$RESULTS_ROOT/$model/$phase/lambda-$coef"
     if [[ "$model" == geo ]]; then
         hours="$geo_hours"
@@ -71,6 +94,9 @@ launch() {
                  "--n-layers=$layers" "--n-heads=$heads" "--slice-num=$slices"
                  "--div-order=4" "--gpu=0")
     fi
+    if [[ "$phase" == forced ]]; then
+        hours=$(( (hours * size + 9999) / 10000 + 1 ))
+    fi
     command+=("--dataset=$dataset" "--ntrain=$size" "--npoints=$points"
               "--seed=$seed" "--data-root=$DATA_ROOT" "--epochs=500"
               "--project-name=${model}_div_loss" "--div-loss-weight=$coef"
@@ -78,6 +104,8 @@ launch() {
               --wandb --calc-div --save --norm-grid)
     if [[ "$phase" == div ]]; then
         command+=(--div-loss --no-ood)
+    elif [[ "$remaining" == true ]]; then
+        command+=(--require-ood)
     fi
     jobs=$((jobs + 1))
     if [[ "$mode" == dry-run ]]; then
@@ -88,7 +116,7 @@ launch() {
     fi
     {
         printf '#!/bin/bash\n'
-        printf '#SBATCH --mem=16g\n#SBATCH --nodes=1\n#SBATCH --ntasks-per-node=1\n'
+        printf '#SBATCH --mem=32g\n#SBATCH --nodes=1\n#SBATCH --ntasks-per-node=1\n'
         printf '#SBATCH --cpus-per-task=1\n#SBATCH --gpus-per-node=1\n'
         printf '#SBATCH --partition=gpuA100x4\n#SBATCH --account=bgcs-delta-gpu\n'
         printf '#SBATCH --constraint=scratch\n'
@@ -96,14 +124,19 @@ launch() {
         printf '#SBATCH --output=%s/out/%%x_%%j.out\n' "$ME_DIR"
         printf '#SBATCH --error=%s/err/%%x_%%j.err\n' "$ME_DIR"
         printf 'set -euo pipefail\nmodule purge\ncd %q\n' "$ME_DIR"
+        printf 'export PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1\n'
         printf '%q ' "${command[@]}"
         printf '\n'
     } | sbatch
 }
 
-if [[ "$mode" == submit ]]; then
+if [[ "$mode" == submit || "$mode" == check ]]; then
     [[ -d "$DATA_ROOT" ]] || { echo "Dataset root missing: $DATA_ROOT" >&2; exit 1; }
     [[ -x "$PYTHON" ]] || { echo "Python missing: $PYTHON (set TRAIN_PYTHON)" >&2; exit 1; }
+    "$PYTHON" "$ME_DIR/check_training_plan.py" < <(
+        bash "$ME_DIR/train_div.sh" "${original_arguments[@]}" --dry-run
+    )
+    [[ "$mode" != check ]] || exit 0
     command -v sbatch >/dev/null
     mkdir -p "$ME_DIR/out" "$ME_DIR/err"
 fi

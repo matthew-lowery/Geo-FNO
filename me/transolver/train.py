@@ -13,6 +13,8 @@ from scipy.io import savemat
 from dataset_boundaries import divergence_interior_mask
 from divergence_metrics import build_rbf_fd_gradient, summarize_divergence
 from ram_dataset_loader import DEFAULT_DATA_ROOT
+from run_artifacts import (RunArtifacts, add_runtime_arguments, validate_runtime,
+                           require_finite, check_gradients)
 from .data import load_dataset, load_ood_dataset
 from .model_dict import get_model
 from .utils.normalizer import UnitTransformer
@@ -47,6 +49,7 @@ def arguments():
     parser.add_argument("--model-folder", type=Path, default=Path("results/transolver/models"))
     for flag in ["wandb", "save", "norm-grid", "div-loss", "calc-div", "no-ood"]:
         parser.add_argument(f"--{flag}", action="store_true")
+    add_runtime_arguments(parser)
     return parser.parse_args()
 
 
@@ -83,13 +86,15 @@ def evaluate(model, positions, inputs, targets, normalizer, output_indices, batc
             y = targets[start:start + batch_size]
             output = model(positions.expand(len(x), -1, -1), fx=x)
             output = normalizer.decode(output)[:, output_indices]
-            total += loss_fn(output.norm(dim=-1), y.norm(dim=-1)).item()
+            require_finite(output, "evaluation prediction")
+            total += loss_fn(output.double().norm(dim=-1), y.double().norm(dim=-1)).item()
             predictions.append(output.cpu())
     return torch.cat(predictions), total / len(inputs)
 
 
 def main():
     args = arguments()
+    validate_runtime(args)
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -98,6 +103,8 @@ def main():
         project=args.project_name, config=vars(args),
         mode="online" if args.wandb else "disabled",
     )
+    name = f"{args.dataset}_{args.seed}_{args.ntrain}_{args.npoints}"
+    artifacts = RunArtifacts(args, name)
     count = args.npoints or None
     data = load_dataset(args.dataset, args.ntrain, count, args.data_root)
     grid, input_indices, output_indices = union_grid(data.input_points, data.output_points)
@@ -140,8 +147,14 @@ def main():
         optimizer, max_lr=args.lr, epochs=args.epochs, steps_per_epoch=len(train_loader),
     )
     loss_fn = TestLoss(size_average=False)
+    normalizers = (input_normalizer, output_normalizer)
+    geometry = {"input_points": data.input_points, "output_points": data.output_points,
+                "grid": grid, "minimum": minimum, "span": span,
+                "input_indices": input_indices, "output_indices": output_indices}
+    start_epoch = artifacts.restore(model, normalizers, (optimizer,), (scheduler,))
+    epoch = start_epoch - 1
     start_time = time.perf_counter()
-    for epoch in range(args.epochs):
+    for epoch in range(start_epoch, start_epoch if args.eval_only else args.epochs):
         model.train()
         data_total, div_total = 0., 0.
         for x, y in train_loader:
@@ -152,7 +165,10 @@ def main():
             target = output_normalizer.decode(y)
             data_loss = loss_fn(output, target)
             div_loss = divergence_loss(output, operators, mask, steps) if args.div_loss else output.new_zeros(())
-            (data_loss + args.div_loss_weight * div_loss).backward()
+            loss = data_loss + args.div_loss_weight * div_loss
+            require_finite(loss, f"training loss at epoch {epoch}")
+            loss.backward()
+            check_gradients(model)
             optimizer.step()
             scheduler.step()
             data_total += data_loss.item()
@@ -163,17 +179,20 @@ def main():
             "train_loss": (data_total + args.div_loss_weight * div_total) / args.ntrain,
         }, step=epoch)
         print(f"epoch={epoch} data_loss={data_total / args.ntrain:.6g}", flush=True)
-    wandb.log({"total_train_time": time.perf_counter() - start_time})
+        if (epoch + 1) % args.checkpoint_every == 0:
+            artifacts.save(epoch, model, normalizers, geometry, (optimizer,), (scheduler,))
+    artifacts.save(epoch, model, normalizers, geometry, (optimizer,), (scheduler,))
+    artifacts.log({"total_train_time": artifacts.elapsed + time.perf_counter() - start_time})
     model.eval()
     predictions, test_loss = evaluate(
         model, positions, tests, test_targets, output_normalizer, output_indices, args.batch_size,
     )
-    wandb.log({"test_loss": test_loss})
+    artifacts.log({"test_loss": test_loss})
     if args.calc_div:
-        wandb.log(summarize_divergence(predictions.to(device), operators, mask, steps))
+        artifacts.log(summarize_divergence(predictions.to(device), operators, mask, steps))
     if not args.no_ood:
         ood = load_ood_dataset(args.dataset, count, args.data_root)
-        wandb.log({"ood_available": ood is not None})
+        artifacts.log({"ood_available": ood is not None})
         if ood is not None:
             x_points, y_points, x, y = ood
             if not (np.allclose(x_points, data.input_points) and np.allclose(y_points, data.output_points)):
@@ -183,12 +202,9 @@ def main():
             _, ood_loss = evaluate(
                 model, positions, x, y, output_normalizer, output_indices, args.batch_size,
             )
-            wandb.log({"ood_loss": ood_loss})
-    if args.save:
-        name = f"{args.dataset}_{args.seed}_{args.ntrain}_{args.npoints}"
-        args.model_folder.mkdir(parents=True, exist_ok=True)
+            artifacts.log({"ood_loss": ood_loss})
+    if args.save and args.calc_div:
         args.div_folder.mkdir(parents=True, exist_ok=True)
-        torch.save({"model_state_dict": model.state_dict()}, args.model_folder / f"{name}.torch")
         savemat(args.div_folder / f"{name}.mat", {
             "x_grid": data.output_points, "y_preds_test": predictions.numpy(),
         })

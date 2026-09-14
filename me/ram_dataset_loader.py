@@ -87,6 +87,15 @@ def _load_mat(root, problem, ood=False):
     return data, None
 
 
+def required_dataset_paths(problem, root, ood=False):
+    problem = _base_problem(problem)
+    paths = [_data_path(root, problem, ood)]
+    if problem == "taylor_green_time_coeffs":
+        name = "data_coeffs_ood.mat" if ood else "data_coeffs_matt.mat"
+        paths.append(Path(root) / "taylor_green" / name)
+    return paths
+
+
 def _fekete_indices(root, problem, points):
     if problem == "flow_cylinder_laminar":
         path = Path(root) / "flow_cylinder" / "flow_cylinder_laminar_fekete.mat"

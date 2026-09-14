@@ -4,9 +4,21 @@ import numpy as np
 import torch
 
 from transolver.train import divergence_loss, pad_inputs, union_grid
+from transolver.model.Physics_Attention import Physics_Attention_Irregular_Mesh
 
 
 class TransolverRuntimeTest(unittest.TestCase):
+    def test_zero_slice_temperature_has_finite_output_and_gradients(self):
+        attention = Physics_Attention_Irregular_Mesh(8, heads=2, dim_head=4, slice_num=4)
+        attention.temperature.data.zero_()
+        x = torch.randn(2, 16, 8, requires_grad=True)
+        y = attention(x)
+        y.square().sum().backward()
+        self.assertTrue(torch.isfinite(y).all())
+        self.assertTrue(torch.isfinite(x.grad).all())
+        self.assertTrue(all(p.grad is None or torch.isfinite(p.grad).all()
+                            for p in attention.parameters()))
+
     def test_union_retains_boundary_inputs_and_output_order(self):
         inputs = np.array([[0., 0.], [0., 1.]])
         outputs = np.array([[.5, .5], [0., 0.], [1., 1.]])

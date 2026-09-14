@@ -47,11 +47,30 @@ class TrainingPlanTest(unittest.TestCase):
             self.assertEqual(options["npoints"], "7000")
             self.assertIn(options["ntrain"], {"100", "500", "1000", "5000", "7000"})
 
+    def test_remaining_cases_and_required_ood(self):
+        jobs = self.plan("--remaining")
+        self.assertEqual(len(jobs), 84)
+        counts = collections.Counter((model, options["dataset"]) for _, model, _, _, _, options in jobs)
+        self.assertEqual(counts, {("geo", "forced_turb"): 30, ("trans", "forced_turb"): 30,
+                                 ("geo", "species_transport"): 3, ("trans", "species_transport"): 3,
+                                 ("geo", "buoyancy_cavity_flow"): 3, ("trans", "buoyancy_cavity_flow"): 15})
+        for phase, model, _, hours, command, options in jobs:
+            self.assertEqual("--require-ood" in command, phase != "div")
+            self.assertIn("rerun-20260914", options["model-folder"])
+            self.assertLessEqual(int(hours.split("=")[1]), 48)
+            if options["dataset"] == "species_transport":
+                self.assertEqual(phase, "baseline")
+                self.assertEqual(hours, "hours=32" if model == "geo" else "hours=12")
+
+    def test_remaining_dataset_filter(self):
+        jobs = self.plan("--remaining", "--dataset", "forced_turb", "--phase", "forced")
+        self.assertEqual(len(jobs), 30)
+
     def test_reference_hyperparameters_and_hours(self):
         jobs = self.plan("--phase", "baseline")
         for _, model, _, hours, _, options in jobs:
             if model == "geo" and options["dataset"] == "forced_turb":
-                self.assertEqual(hours, "hours=15")
+                self.assertEqual(hours, "hours=36")
                 self.assertEqual(options["batch-size"], "10")
                 self.assertEqual(options["modes"], "10")
             if model == "trans" and options["dataset"] == "backward_facing_step":

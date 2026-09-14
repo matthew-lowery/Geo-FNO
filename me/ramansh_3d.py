@@ -17,6 +17,8 @@ from scipy.spatial import cKDTree
 from ram_dataset_loader import DEFAULT_DATA_ROOT, load_dataset, try_load_ood_dataset
 from divergence_metrics import summarize_divergence
 from dataset_boundaries import divergence_interior_mask
+from run_artifacts import (RunArtifacts, add_runtime_arguments, validate_runtime,
+                           require_finite, check_gradients)
 
 
 def build_rbf_fd_gradient(points, order=2):
@@ -139,13 +141,16 @@ parser.add_argument('--dataset', type=str, default='taylor_green_time', choices=
 parser.add_argument('--no-ood', dest='eval_ood', action='store_false')
 parser.set_defaults(eval_ood=True)
                                                                       
+add_runtime_arguments(parser)
 args = parser.parse_args()
+validate_runtime(args)
 print(args)
 name = f"{args.dataset}_{args.seed}_{args.ntrain}_{args.npoints}"
 if not args.wandb:
     os.environ["WANDB_MODE"] = "disabled"
 wandb.init(project=args.project_name, name=f'{name}')
 wandb.config.update(args)
+artifacts = RunArtifacts(args, name)
 
 set_seed(args.seed)
 batch_size = args.batch_size
@@ -259,8 +264,14 @@ scheduler_iphi = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_iphi, T_ma
 
 myloss = LpLoss(size_average=False)
 
+optimizers = (optimizer_fno, optimizer_iphi)
+schedulers = (scheduler_fno, scheduler_iphi)
+normalizers = (x_normalizer, y_normalizer)
+geometry = {"input_points": dataset.input_points, "output_points": dataset.output_points}
+start_epoch = artifacts.restore(model, normalizers, optimizers, schedulers, model_iphi)
+ep = start_epoch - 1
 t1 = time.perf_counter()
-for ep in range(epochs):
+for ep in range(start_epoch, start_epoch if args.eval_only else epochs):
     model.train()
     train_l2 = 0
     train_div = 0
@@ -279,13 +290,14 @@ for ep in range(epochs):
             out, gradient_operators, interior_mask, div_time_steps
         ) if args.div_loss else out.new_zeros(())
         loss = data_loss + args.div_loss_weight * div_loss
+        require_finite(loss, f'training loss at epoch {ep}')
         loss.backward()
+        check_gradients(model, model_iphi)
         optimizer_fno.step()
         optimizer_iphi.step()
         train_l2 += data_loss.item()
         train_div += div_loss.item()
         train_total += loss.item()
-        print(loss.item())
     train_t2 = time.perf_counter() 
 
     scheduler_fno.step()
@@ -297,6 +309,10 @@ for ep in range(epochs):
     print(ep, 'train_time:', train_t2-train_t1, f'{train_total=}', f'{train_l2=}', f'{train_div=}')
     wandb.log({"train_loss": train_total, "train_data_loss": train_l2,
                "train_div_loss": train_div, "train_time": train_t2-train_t1}, step=ep)
+    if (ep + 1) % args.checkpoint_every == 0:
+        artifacts.save(ep, model, normalizers, geometry, optimizers, schedulers, model_iphi)
+
+artifacts.save(ep, model, normalizers, geometry, optimizers, schedulers, model_iphi)
 
 ### eval when training is over
 model.eval()
@@ -309,18 +325,18 @@ with torch.no_grad():
         inp = torch.concat((x, x_grid), axis=-1) ### nbatch, n, 3
         out = model(inp, code=None, x_in=x_grid, x_out=y_grid, iphi=model_iphi) 
         out = y_normalizer.decode(out)
-        out = torch.linalg.norm(out, dim=-1) ### (batch, pts, 3) --> (batch, pts)
-        y = torch.linalg.norm(y, dim=-1)
-        test_l2 += myloss(out.view(batch_size, -1), y.view(batch_size, -1)).item()
+        out = torch.linalg.norm(out.double(), dim=-1) ### (batch, pts, 3) --> (batch, pts)
+        y = torch.linalg.norm(y.double(), dim=-1)
+        test_l2 += myloss(out.double().reshape(len(x), -1), y.double().reshape(len(x), -1)).item()
 eval_t2 = time.perf_counter()
 test_l2 /= ntest
 
 print(ep, 'eval_time', eval_t2-eval_t1, f'{test_l2=}')
-wandb.log({"test_loss": test_l2, "eval_time":eval_t2-eval_t1,
-            }, step=ep)
+artifacts.log({"test_loss": test_l2, "eval_time":eval_t2-eval_t1,
+            })
 
 t2 = time.perf_counter()
-wandb.log({"total_train_time": t2-t1}, step=ep)
+artifacts.log({"total_train_time": artifacts.elapsed + t2-t1})
 print('total_train_time', t2-t1)
 
 ### collect model output for divergence calculation
@@ -334,14 +350,14 @@ if args.calc_div:
             out = y_normalizer.decode(out)
             y_preds_test.append(out)
     y_preds_test = torch.stack(y_preds_test).reshape(ntest, -1, out.shape[-1])
-    wandb.log(summarize_divergence(
+    artifacts.log(summarize_divergence(
         y_preds_test, gradient_operators, interior_mask, div_time_steps
-    ), step=ep)
+    ))
 
 ood_dataset = None
 if args.eval_ood:
     ood_dataset = try_load_ood_dataset(args.dataset, point_count, args.data_root)
-    wandb.log({'ood_available': ood_dataset is not None})
+    artifacts.log({'ood_available': ood_dataset is not None})
 
 if ood_dataset is not None:
     ood_x_grid, ood_y_grid, ood_x, ood_y = ood_dataset
@@ -377,18 +393,17 @@ if ood_dataset is not None:
             inp = torch.concat((x, x_grid_batch), axis=-1)
             out = model(inp, code=None, x_in=x_grid_batch, x_out=y_grid_batch, iphi=model_iphi)
             out = y_normalizer.decode(out)
-            ood_loss += myloss(out.reshape(len(x), -1), y.reshape(len(x), -1)).item()
+            ood_loss += myloss(out.double().reshape(len(x), -1), y.double().reshape(len(x), -1)).item()
     ood_loss /= len(ood_x)
-    wandb.log({f'ood/{args.dataset}': ood_loss}, step=ep)
+    artifacts.log({'ood_loss': ood_loss, f'ood/{args.dataset}': ood_loss})
 
 ### saving model for later use
-if args.save:
+if args.save and args.calc_div:
     os.makedirs(args.model_folder, exist_ok=True)
-    torch.save({
-    "model_state_dict": model.state_dict(),
-    }, os.path.join(args.model_folder, f'{name}.torch'))
 
     ### saving test output functions for div calc 
     os.makedirs(args.div_folder, exist_ok=True)
     scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': physical_output_grid,
                                                            'y_preds_test': y_preds_test.cpu().numpy().astype(np.float64)})
+
+wandb.finish()
