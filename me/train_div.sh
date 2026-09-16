@@ -13,13 +13,14 @@ phase_filter=all
 model_filter=all
 jobs=0
 remaining=false
+geo_ood_missing=false
 dataset_filter=all
 seed_filter=all
 size_filter=all
 original_arguments=("$@")
 
 usage() {
-    echo "Usage: bash train_div.sh [--dry-run|--check|--submit] [--remaining] [--dataset NAME] [--seed N] [--ntrain N] [--phase all|div|baseline|forced] [--model all|geo|trans]"
+    echo "Usage: bash train_div.sh [--dry-run|--check|--submit] [--remaining|--geo-ood-missing] [--dataset NAME] [--seed N] [--ntrain N] [--phase all|div|baseline|forced] [--model all|geo|trans]"
     echo "Overrides: RAM_DATA_ROOT, RAM_RESULTS_ROOT, TRAIN_PYTHON"
 }
 
@@ -29,6 +30,7 @@ while (( $# )); do
         --submit) mode=submit; shift ;;
         --check) mode=check; shift ;;
         --remaining) remaining=true; shift ;;
+        --geo-ood-missing) geo_ood_missing=true; shift ;;
         --dataset) dataset_filter="${2:?missing dataset}"; shift 2 ;;
         --seed) seed_filter="${2:?missing seed}"; shift 2 ;;
         --ntrain) size_filter="${2:?missing ntrain}"; shift 2 ;;
@@ -42,6 +44,14 @@ case "$phase_filter" in all|div|baseline|forced) ;; *) usage >&2; exit 2 ;; esac
 case "$model_filter" in all|geo|trans) ;; *) usage >&2; exit 2 ;; esac
 if [[ "$remaining" == true ]]; then
     RESULTS_ROOT="${RAM_RESULTS_ROOT:-/projects/bfel/mlowery/operator-benchmarks/rerun-20260914}"
+fi
+if [[ "$geo_ood_missing" == true ]]; then
+    [[ "$remaining" == false ]] || { echo "Choose one rerun selection" >&2; exit 2; }
+    [[ "$model_filter" == all || "$model_filter" == geo ]] || { echo "Geo-FNO only" >&2; exit 2; }
+    [[ "$phase_filter" == all || "$phase_filter" == baseline ]] || { echo "No-div baselines only" >&2; exit 2; }
+    model_filter=geo
+    phase_filter=baseline
+    RESULTS_ROOT="${RAM_RESULTS_ROOT:-/projects/bfel/mlowery/operator-benchmarks/geo-ood-recovery-20260916}"
 fi
 
 # dataset, Geo entry, training count, points, Geo hours/batch/resolution/width/modes/order,
@@ -100,6 +110,11 @@ launch() {
     [[ "$dataset_filter" == all || "$dataset_filter" == "$dataset" ]] || return 0
     [[ "$seed_filter" == all || "$seed_filter" == "$seed" ]] || return 0
     [[ "$size_filter" == all || "$size_filter" == "$size" ]] || return 0
+    if [[ "$geo_ood_missing" == true ]]; then
+        case "$dataset" in
+            forced_turb|species_transport|buoyancy_cavity_flow) return 0 ;;
+        esac
+    fi
     if [[ "$remaining" == true ]]; then
         case "$dataset:$model:$phase" in
             forced_turb:*:*|species_transport:*:baseline|buoyancy_cavity_flow:geo:baseline|buoyancy_cavity_flow:trans:div|buoyancy_cavity_flow:trans:baseline) ;;
@@ -111,9 +126,17 @@ launch() {
     local -a command
     label="${model}_${dataset}_s${seed}_n${size}_l${coef}"
     [[ "$remaining" != true ]] || label="rerun_${label}"
+    [[ "$geo_ood_missing" != true ]] || label="oodfix_${label}"
     result_dir="$RESULTS_ROOT/$model/$phase/lambda-$coef"
     if [[ "$model" == geo ]]; then
         hours="$geo_hours"
+        if [[ "$geo_ood_missing" == true ]]; then
+            case "$dataset" in
+                flow_cylinder_shedding) hours=6 ;;
+                lid_cavity_flow|taylor_green_spacetime) hours=4 ;;
+                taylor_green) hours=3 ;;
+            esac
+        fi
         command=("$PYTHON" "$geo_entry" "--batch-size=$geo_batch"
                  "--lr-fno=1e-3" "--lr-phi=1e-4" "--res1d=$resolution"
                  "--width=$width" "--modes=$modes" "--div-order=$geo_order")

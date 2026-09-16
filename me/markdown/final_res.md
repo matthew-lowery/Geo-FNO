@@ -1,27 +1,35 @@
 # Final results
 
-New RAM-dataset batch: runs started 11–13 September 2026 in `../wandb`, all recorded at commit `eecb2394c41a7a9d8e1402bb379aa536eed4ea3d`. Older runs and values from `new_res.md` are not mixed into these averages.
+Updated from `../wandb_final/wandb`: runs started 11–16 September 2026. The cache contains the original 330 runs at commit `eecb239` and 43 additional runs at `52a150b`. For each model/dataset/training-size/divergence-weight/seed configuration, the latest attempt replaces the earlier attempt; repeated seeds are not counted twice. Older August runs and values from `new_res.md` are excluded.
 
 Rows follow the current `train_div.sh`: no-div baseline and divergence-penalty weight $\lambda \in \{0.001, 0.01, 0.1, 1\}$. Each configuration targets seeds 1, 2, 3 and 500 epochs. The columns `ntrain` and `npoints` give the requested training-sample count and spatial point budget; spacetime layouts can expand this budget. `Div. order` is the logged RBF-FD polynomial degree, not an empirically measured convergence order. The new Geo-FNO order-2 runs are retained here because they belong to this batch; historical order-2 runs are excluded.
 
-Metric entries are mean ± population standard deviation across seeds with finite final `test_loss`; NaN seeds are excluded and explicitly listed. A single finite seed has no standard deviation. For scalar seed values $z_1,\ldots,z_K$, where $K$ is the number of contributing seeds, the reported mean $\bar z$ and standard deviation $\sigma$ are:
+Metric entries are mean ± population standard deviation across seeds with finite final `test_loss`; NaN seeds are excluded and explicitly listed. A single finite seed has no standard deviation. For scalar seed values $z_1,\ldots,z_K$, where $K$ is the number of contributing seeds, the reported mean $\bar z$ and standard deviation $\sigma$ are given by Eq. (1):
 
 $$
 \bar z=\frac{1}{K}\sum_{j=1}^{K}z_j,\qquad
-\sigma=\sqrt{\frac{1}{K}\sum_{j=1}^{K}(z_j-\bar z)^2}.
+\sigma=\sqrt{\frac{1}{K}\sum_{j=1}^{K}(z_j-\bar z)^2}. \tag{1}
 $$
 
 `Time (s)` averages the logged `total_train_time` over all runs with that field, including NaN runs. It is not W&B runtime: Geo-FNO's timer includes final test evaluation (and its coefficient entry places it after OOD handling), while Transolver stops its timer before final evaluation.
 
-Test and OOD losses are mean relative Euclidean errors of **field magnitudes**, not vector-field errors. For evaluation sample $i$, let $\widehat u_{i,q}$ and $u_{i,q}$ be the predicted and target component vectors at output index $q$. Define magnitude vectors $\widehat a_i=(\|\widehat u_{i,q}\|_2)_q$ and $a_i=(\|u_{i,q}\|_2)_q$. With $M$ evaluation samples, the logged loss is:
+Test losses, Transolver OOD losses, and Geo-FNO coefficient-entry OOD losses compare **field magnitudes**. Geo-FNO's other 2D/3D OOD losses compare **vector components**, so those OOD columns are not directly comparable across models. For evaluation sample $i$, let $\widehat u_{i,q}$ and $u_{i,q}$ be the predicted and target component vectors at output index $q$. Define magnitude vectors $\widehat a_i=(\|\widehat u_{i,q}\|_2)_q$ and $a_i=(\|u_{i,q}\|_2)_q$. With $M$ evaluation samples, the magnitude-based loss is Eq. (2):
 
 $$
-\frac{1}{M}\sum_{i=1}^{M}\frac{\|\widehat a_i-a_i\|_2}{\|a_i\|_2}.
+\frac{1}{M}\sum_{i=1}^{M}\frac{\|\widehat a_i-a_i\|_2}{\|a_i\|_2}. \tag{2}
 $$
+
+For Geo-FNO's component-based OOD metric, let $\widehat U_i$ and $U_i$ be the predicted and target vectors formed by concatenating every output point's components for sample $i$. Its OOD loss is Eq. (3), using the same sample count $M$:
+
+$$
+\frac{1}{M}\sum_{i=1}^{M}\frac{\|\widehat U_i-U_i\|_2}{\|U_i\|_2}. \tag{3}
+$$
+
+The `52a150b` reruns use float64 evaluation reductions and bounded Transolver slice temperature; retained original runs predate these fixes. Seed averages use Eq. (1) within each listed row.
 
 Interior divergence is the maximum / median absolute discrete divergence over test samples and interior points (including time slices for spacetime datasets), followed by the seed aggregation above. Different orders produce different discrete diagnostics.
 
-`NaN` means a logged numerical failure; `No summary` means an attempted run has metadata but no cached summary, not necessarily a NaN failure. Blank metric cells indicate no result; `—` indicates an absent metric in a populated result. `Disabled` means OOD evaluation was disabled for div training; `No OOD data` means the run logged `ood_available=false`. Unqualified seeds in the status column have finite test loss.
+`NaN` means a logged numerical failure; `No summary` means an attempted run has metadata but no cached summary, not necessarily a NaN failure. Blank metric cells indicate no result; `—` indicates an absent metric in a populated result. `Disabled` means OOD evaluation was disabled for div training; `No OOD data` means the run logged `ood_available=false`. `Partial` marks a rerun with training progress but no final test summary; the epoch count is observed progress, not confirmation that the remote job is still running. `Missing` means no cached attempt for that seed. Unqualified seeds have finite test loss.
 
 ## Benchmark results
 
@@ -83,10 +91,10 @@ Interior divergence is the maximum / median absolute discrete divergence over te
 |  |  | div | 0.1 | 3 |  |  | No summary: 1, 2, 3 |  |  |  |  |
 |  |  | div | 1 | 3 |  |  | No summary: 1, 2, 3 |  |  |  |  |
 |  | **3D Homogeneous Forced Isotropic Turbulence** | no-div | 0 | 3 | 10000 | 7000 | Missing: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.001 | 3 |  |  | Missing: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.01 | 3 |  |  | Missing: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.1 | 3 |  |  | Missing: 1, 2, 3 |  |  |  |  |
-|  |  | div | 1 | 3 |  |  | Missing: 1, 2, 3 |  |  |  |  |
+|  |  | div | 0.001 | 3 |  |  | Partial: 1 (182/500 epochs logged); Missing: 2, 3 |  |  |  |  |
+|  |  | div | 0.01 | 3 |  |  | Partial: 1 (137/500 epochs logged); Missing: 2, 3 |  |  |  |  |
+|  |  | div | 0.1 | 3 |  |  | Partial: 1 (128/500 epochs logged); Missing: 2, 3 |  |  |  |  |
+|  |  | div | 1 | 3 |  |  | Partial: 1 (126/500 epochs logged); Missing: 2, 3 |  |  |  |  |
 | **Transolver** | **2D Backward-Facing Step** | no-div | 0 | 4 | 500 | 1000 | 1, 2, 3 | 247.6 ± 0.7593 | 7.330e-4 ± 2.395e-5 | 1.987 ± 0.001957 / 9.624e-4 ± 1.416e-4 | 0.314 ± 0.007866 |
 |  |  | div | 0.001 | 4 |  |  | 1, 2, 3 | 268.7 ± 0.7835 | 7.247e-4 ± 3.489e-5 | 1.959 ± 0.01665 / 8.132e-4 ± 8.025e-5 | Disabled |
 |  |  | div | 0.01 | 4 |  |  | 1, 2, 3 | 267.4 ± 0.7281 | 7.470e-4 ± 1.118e-5 | 1.957 ± 0.008743 / 0.001016 ± 3.989e-5 | Disabled |
@@ -108,10 +116,10 @@ Interior divergence is the maximum / median absolute discrete divergence over te
 |  |  | div | 0.1 | 4 |  |  | 2; NaN: 1, 3 | 4575 ± 24.3 | 0.01174 | 1.734 / 0.05139 | Disabled |
 |  |  | div | 1 | 4 |  |  | NaN: 1, 2, 3 | 4586 ± 21.66 | NaN | NaN / NaN | Disabled |
 |  | **2D Buoyancy-Driven Cavity Flow** | no-div | 0 | 4 | 10000 | 5000 | No summary: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.001 | 4 |  |  | No summary: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.01 | 4 |  |  | No summary: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.1 | 4 |  |  | No summary: 1, 2, 3 |  |  |  |  |
-|  |  | div | 1 | 4 |  |  | No summary: 1, 2, 3 |  |  |  |  |
+|  |  | div | 0.001 | 4 |  |  | 1, 2, 3 | 17020 ± 6.049 | 1.932e-4 ± 1.208e-5 | 3.03 ± 0.005111 / 0.01946 ± 3.786e-5 | Disabled |
+|  |  | div | 0.01 | 4 |  |  | 1, 2, 3 | 17010 ± 8.593 | 2.309e-4 ± 4.054e-5 | 3.009 ± 0.004214 / 0.01955 ± 3.800e-5 | Disabled |
+|  |  | div | 0.1 | 4 |  |  | 1, 2, 3 | 17010 ± 8.423 | 0.001726 ± 1.203e-5 | 2.323 ± 0.004224 / 0.01874 ± 8.637e-5 | Disabled |
+|  |  | div | 1 | 4 |  |  | 1, 2, 3 | 17030 ± 22.3 | 0.006201 ± 1.037e-4 | 0.5415 ± 0.05091 / 0.01292 ± 4.891e-4 | Disabled |
 |  | **2D Taylor–Green Vortices** | no-div | 0 | 4 | 5000 | 500 | 1; NaN: 2, 3 | 2042 ± 7.277 | 1.336e-4 | 0.8245 / 0.01645 | ∞ |
 |  |  | div | 0.001 | 4 |  |  | 3; NaN: 1, 2 | 2238 ± 9.686 | 1.352e-4 | 0.5808 / 0.01616 | Disabled |
 |  |  | div | 0.01 | 4 |  |  | 1; NaN: 2, 3 | 2240 ± 16.52 | 1.072e-4 | 0.1992 / 0.01083 | Disabled |
@@ -137,157 +145,175 @@ Interior divergence is the maximum / median absolute discrete divergence over te
 |  |  | div | 0.01 | 4 |  |  | 1, 2, 3 | 228 ± 0.9234 | 0.003497 ± 2.574e-4 | 0.7141 ± 0.005287 / 0.03122 ± 0.001046 | Disabled |
 |  |  | div | 0.1 | 4 |  |  | 1, 2, 3 | 227.9 ± 1.358 | 0.003747 ± 2.271e-4 | 0.6439 ± 0.008907 / 0.03012 ± 9.602e-4 | Disabled |
 |  |  | div | 1 | 4 |  |  | 1, 2, 3 | 227.1 ± 0.3592 | 0.005517 ± 3.048e-4 | 0.4035 ± 0.005305 / 0.02757 ± 4.458e-4 | Disabled |
-|  | **3D Species Transport** | no-div | 0 | 4 | 10000 | 7000 | No summary: 1, 2, 3 |  |  |  |  |
+|  | **3D Species Transport** | no-div | 0 | 4 | 10000 | 7000 | 1, 2, 3 | 26110 ± 39.13 | 0.002737 ± 1.587e-4 | 1.044e+5 ± 254.9 / 981.9 ± 1.891 | 1.352 ± 0.1792 |
 |  |  | div | 0.001 | 4 |  |  | No summary: 1, 2, 3 |  |  |  |  |
 |  |  | div | 0.01 | 4 |  |  | No summary: 1, 2, 3 |  |  |  |  |
 |  |  | div | 0.1 | 4 |  |  | No summary: 1, 2, 3 |  |  |  |  |
 |  |  | div | 1 | 4 |  |  | No summary: 1, 2, 3 |  |  |  |  |
 |  | **3D Homogeneous Forced Isotropic Turbulence** | no-div | 0 | 4 | 10000 | 7000 | Missing: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.001 | 4 |  |  | Missing: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.01 | 4 |  |  | Missing: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.1 | 4 |  |  | Missing: 1, 2, 3 |  |  |  |  |
-|  |  | div | 1 | 4 |  |  | Missing: 1, 2, 3 |  |  |  |  |
+|  |  | div | 0.001 | 4 |  |  | 1; Missing: 2, 3 | 23410 | 0.00116 | 2.184 / 0.03647 | Disabled |
+|  |  | div | 0.01 | 4 |  |  | 1; Missing: 2, 3 | 23280 | 0.001125 | 2.157 / 0.03633 | Disabled |
+|  |  | div | 0.1 | 4 |  |  | 1; Missing: 2, 3 | 23410 | 0.001182 | 1.862 / 0.03534 | Disabled |
+|  |  | div | 1 | 4 |  |  | 1; Missing: 2, 3 | 23300 | 0.001993 | 0.5735 / 0.02617 | Disabled |
 
 ## Forced-turbulence training-size sweep
 
-No runs from this new sweep are present in the cache. All rows are no-div, with 7,000 requested points and seeds 1, 2, 3. The 10,000-training-sample configurations are listed in the main table.
+All rows are no-div, with 7,000 requested points and seeds 1, 2, 3. Both models have all three seeds for training sizes 100, 500, and 1,000. At 5,000, Transolver has seed 1 completed and Geo-FNO has seed 1 partial; the remaining seeds and all 7,000-training-sample runs are absent. The 10,000-training-sample configurations are listed in the main table.
 
 | Framework | ntrain | npoints | Div. order | Seeds / status | Time (s) | Test loss | Interior test div (max / median) | OOD loss |
 |---|---:|---:|---:|---|---:|---:|---:|---:|
-| **Geo-FNO** | 100 | 7000 | 3 | Missing: 1, 2, 3 |  |  |  |  |
-|  | 500 | 7000 | 3 | Missing: 1, 2, 3 |  |  |  |  |
-|  | 1000 | 7000 | 3 | Missing: 1, 2, 3 |  |  |  |  |
-|  | 5000 | 7000 | 3 | Missing: 1, 2, 3 |  |  |  |  |
+| **Geo-FNO** | 100 | 7000 | 3 | 1, 2, 3 | 1233 ± 3.357 | 0.003366 ± 4.830e-4 | 2.122 ± 0.1829 / 0.04704 ± 0.00103 | 0.07986 ± 0.009248 |
+|  | 500 | 7000 | 3 | 1, 2, 3 | 5910 ± 53.29 | 6.709e-4 ± 5.359e-5 | 1.822 ± 0.007078 / 0.04356 ± 5.227e-5 | 0.03947 ± 0.004512 |
+|  | 1000 | 7000 | 3 | 1, 2, 3 | 11920 ± 44.48 | 4.357e-4 ± 3.528e-5 | 1.809 ± 0.003655 / 0.04343 ± 1.162e-5 | 0.02816 ± 0.002435 |
+|  | 5000 | 7000 | 3 | Partial: 1 (322/500 epochs logged); Missing: 2, 3 |  |  |  |  |
 |  | 7000 | 7000 | 3 | Missing: 1, 2, 3 |  |  |  |  |
-| **Transolver** | 100 | 7000 | 4 | Missing: 1, 2, 3 |  |  |  |  |
-|  | 500 | 7000 | 4 | Missing: 1, 2, 3 |  |  |  |  |
-|  | 1000 | 7000 | 4 | Missing: 1, 2, 3 |  |  |  |  |
-|  | 5000 | 7000 | 4 | Missing: 1, 2, 3 |  |  |  |  |
+| **Transolver** | 100 | 7000 | 4 | 1, 2, 3 | 228.9 ± 0.7924 | 0.02715 ± 2.720e-4 | 3.111 ± 0.2398 / 0.07385 ± 0.001233 | 0.06246 ± 7.209e-5 |
+|  | 500 | 7000 | 4 | 1, 2, 3 | 1132 ± 0.7685 | 0.01112 ± 2.876e-4 | 2.752 ± 0.1331 / 0.04643 ± 6.002e-4 | 0.04097 ± 8.927e-4 |
+|  | 1000 | 7000 | 4 | 1, 2, 3 | 2259 ± 0.7044 | 0.005438 ± 1.573e-4 | 2.528 ± 0.1365 / 0.03984 ± 9.238e-5 | 0.02715 ± 6.270e-4 |
+|  | 5000 | 7000 | 4 | 1; Missing: 2, 3 | 11320 | 0.001705 | 2.185 / 0.03686 | 0.01378 |
 |  | 7000 | 7000 | 4 | Missing: 1, 2, 3 |  |  |  |  |
 
 ## Completion notes
 
-- 330 new cached runs: 232 finite final test losses, 53 NaN test losses, and 45 without summaries. There are no duplicate seeds within a configuration.
-- All species-transport attempts (both models) and all Transolver buoyancy-cavity attempts lack summaries: 15 runs per model/dataset combination. Their metric cells are blank, not fabricated NaNs.
-- No new forced-turbulence runs are cached: 30 main-table runs and 30 training-size-sweep runs remain unaccounted for locally. Cache absence does not establish whether a cluster job ran.
-- Geo-FNO baseline OOD losses are absent from all 30 available summaries, even where `ood_available=true`. Its code logs `ood_available` without an explicit step, then logs OOD at the previous epoch step; this ordering can drop the OOD metric. No OOD value is inferred from the test loss.
-- Geo-FNO Taylor–Green coefficient baselines also lack summary time and divergence fields, which are logged after that same step increment. Their test losses are available.
-- Available baseline summaries mark buoyancy-cavity and both Taylor–Green coefficient variants as lacking OOD data (Transolver buoyancy has no summary to inspect).
-- Previously requested NaN placeholders are not carried over where these new runs provide actual finite measurements.
+- Of 43 additional runs, 38 have finite final test losses and five have partial training logs without final summaries. These include 12 completed Transolver buoyancy div runs, three completed Transolver species baselines, 19 completed size-sweep runs, and four completed Transolver forced-turbulence div runs.
+- The table selects 358 distinct seed/configuration attempts from 373 cached runs: 270 finite final test losses, 53 NaN test losses, 30 old attempts without summaries, and five partial reruns. Fifteen earlier failed attempts are superseded, not averaged into the new results.
+- All four Transolver buoyancy div weights now have seeds 1, 2, 3. Its no-div/OOD case was not rerun because the OOD file is absent. Geo-FNO's existing buoyancy baseline is retained with `No OOD data`.
+- Transolver species no-div now has all three seeds and OOD results. No new Geo-FNO species result is present; species div training was outside the rerun scope.
+- Forced-turbulence div training has only seed 1 cached for each weight: completed for Transolver, partial for Geo-FNO. The 10,000-training-sample no-div runs for both models are absent.
+- The five partial Geo-FNO runs have logged 182/500, 137/500, 128/500, and 126/500 epochs for the four forced-turbulence div weights, respectively, and 322/500 epochs for its 5,000-sample no-div sweep. No interim training loss is substituted for final test or OOD loss.
+- All 22 new completed no-div runs have OOD losses in their summaries: 19 forced-turbulence sweep runs and three Transolver species baselines. The earlier Geo-FNO baseline OOD losses remain unavailable; they were not restored by these reruns.
+- Geo-FNO's original Taylor–Green coefficient baselines still lack summary time and divergence fields because of the old logging-step issue. The buoyancy and both Taylor–Green coefficient OOD datasets were missing in the original baseline runs.
+- Missing files are treated as out-of-scope for the rerun launcher; old attempted rows remain visible for provenance. An absent run in this cache alone does not establish whether it was skipped, queued, running, or failed remotely.
 
 ## Run provenance
 
-Each link identifies the cached run directory; use `files/config.yaml` and `files/wandb-summary.json`, or `files/wandb-metadata.json` arguments where the config/summary is absent. Seed links include NaN and no-summary attempts. Training sizes and orders match the main table.
+Links point to selected cached run directories in `wandb_final/wandb`. Read `files/config.yaml` and `files/wandb-summary.json`; where these are absent, use `files/wandb-metadata.json` arguments and `files/output.log`. Missing seed links mean no cached attempt. Earlier superseded attempts remain in the cache but are not listed or averaged. The training-size column distinguishes the forced-turbulence sweep from the main experiment.
 
-| Framework | Dataset ID | $\lambda$ | Seed 1 | Seed 2 | Seed 3 |
-|---|---|---:|---|---|---|
-| Geo-FNO | `backward_facing_step` | 0 | [ycxutvm3](../wandb/run-20260911_233838-ycxutvm3/) | [635kjgnn](../wandb/run-20260912_000649-635kjgnn/) | [8b91c797](../wandb/run-20260912_002007-8b91c797/) |
-|  |  | 0.001 | [h7oj0a4x](../wandb/run-20260911_145108-h7oj0a4x/) | [ir1kjgo3](../wandb/run-20260911_180045-ir1kjgo3/) | [33310qmo](../wandb/run-20260911_201618-33310qmo/) |
-|  |  | 0.01 | [74jn4i2m](../wandb/run-20260911_150222-74jn4i2m/) | [fhrzluqe](../wandb/run-20260911_201623-fhrzluqe/) | [yj07iw9i](../wandb/run-20260911_202332-yj07iw9i/) |
-|  |  | 0.1 | [f8vj489k](../wandb/run-20260911_152007-f8vj489k/) | [983yerdp](../wandb/run-20260911_201623-983yerdp/) | [5cxxovm1](../wandb/run-20260911_220947-5cxxovm1/) |
-|  |  | 1 | [5ffp5e5r](../wandb/run-20260911_170403-5ffp5e5r/) | [iu8aiuei](../wandb/run-20260911_201621-iu8aiuei/) | [peeaz7va](../wandb/run-20260911_232802-peeaz7va/) |
-|  | `flow_cylinder_laminar` | 0 | [2m13e23v](../wandb/run-20260911_233400-2m13e23v/) | [vdw7cuzo](../wandb/run-20260912_000649-vdw7cuzo/) | [ttfvriio](../wandb/run-20260912_001705-ttfvriio/) |
-|  |  | 0.001 | [cj9415e3](../wandb/run-20260911_144936-cj9415e3/) | [2k4n5qkb](../wandb/run-20260911_180046-2k4n5qkb/) | [opnsfg7s](../wandb/run-20260911_201623-opnsfg7s/) |
-|  |  | 0.01 | [rwtg4ak3](../wandb/run-20260911_145745-rwtg4ak3/) | [78hv2jrf](../wandb/run-20260911_195130-78hv2jrf/) | [0pq71utq](../wandb/run-20260911_201750-0pq71utq/) |
-|  |  | 0.1 | [by13yr9t](../wandb/run-20260911_151819-by13yr9t/) | [t1gn9lvk](../wandb/run-20260911_201623-t1gn9lvk/) | [50latx00](../wandb/run-20260911_215942-50latx00/) |
-|  |  | 1 | [gj77wdpy](../wandb/run-20260911_153526-gj77wdpy/) | [e6vdv7a2](../wandb/run-20260911_201621-e6vdv7a2/) | [tenuodn3](../wandb/run-20260911_225447-tenuodn3/) |
-|  | `flow_cylinder_shedding` | 0 | [99ns0put](../wandb/run-20260912_204212-99ns0put/) | [oumxu1rv](../wandb/run-20260912_212413-oumxu1rv/) | [zlv5gclw](../wandb/run-20260912_233900-zlv5gclw/) |
-|  |  | 0.001 | [njtv50p4](../wandb/run-20260911_144936-njtv50p4/) | [9b2gs67a](../wandb/run-20260911_222604-9b2gs67a/) | [vqyfx19x](../wandb/run-20260912_165151-vqyfx19x/) |
-|  |  | 0.01 | [qe4rqkfm](../wandb/run-20260911_150024-qe4rqkfm/) | [8aad13gp](../wandb/run-20260911_224329-8aad13gp/) | [9g7owsw9](../wandb/run-20260912_200011-9g7owsw9/) |
-|  |  | 0.1 | [d1z8hba9](../wandb/run-20260911_151900-d1z8hba9/) | [fjanuags](../wandb/run-20260912_134238-fjanuags/) | [xi05tesn](../wandb/run-20260912_201913-xi05tesn/) |
-|  |  | 1 | [fx8ywn9z](../wandb/run-20260911_153533-fx8ywn9z/) | [9uknzwsw](../wandb/run-20260912_164846-9uknzwsw/) | [jy6b4evq](../wandb/run-20260912_202111-jy6b4evq/) |
-|  | `lid_cavity_flow` | 0 | [cnugxlp3](../wandb/run-20260911_233400-cnugxlp3/) | [mfk11cbh](../wandb/run-20260912_000649-mfk11cbh/) | [8dnhozi9](../wandb/run-20260912_001834-8dnhozi9/) |
-|  |  | 0.001 | [gvswajsn](../wandb/run-20260911_145010-gvswajsn/) | [qy3rbqx6](../wandb/run-20260911_180045-qy3rbqx6/) | [x5mmzme5](../wandb/run-20260911_201623-x5mmzme5/) |
-|  |  | 0.01 | [yvsn8dn5](../wandb/run-20260911_150148-yvsn8dn5/) | [jo0atf8r](../wandb/run-20260911_201623-jo0atf8r/) | [sse7hmwg](../wandb/run-20260911_202159-sse7hmwg/) |
-|  |  | 0.1 | [w96njh22](../wandb/run-20260911_152001-w96njh22/) | [n3bvumaj](../wandb/run-20260911_201623-n3bvumaj/) | [rs81lrpi](../wandb/run-20260911_220947-rs81lrpi/) |
-|  |  | 1 | [t4qxma0g](../wandb/run-20260911_170108-t4qxma0g/) | [6jinerk7](../wandb/run-20260911_201621-6jinerk7/) | [qa2aiue0](../wandb/run-20260911_232804-qa2aiue0/) |
-|  | `buoyancy_cavity_flow` | 0 | [u20b6v2g](../wandb/run-20260913_015653-u20b6v2g/) | [g6e661vm](../wandb/run-20260913_020049-g6e661vm/) | [zc2993lc](../wandb/run-20260913_020449-zc2993lc/) |
-|  |  | 0.001 | [7pc8agtw](../wandb/run-20260911_145110-7pc8agtw/) | [gryumiyo](../wandb/run-20260912_152422-gryumiyo/) | [cn0fnrwc](../wandb/run-20260912_231058-cn0fnrwc/) |
-|  |  | 0.01 | [7wgfs8qe](../wandb/run-20260911_150325-7wgfs8qe/) | [8ajptlr6](../wandb/run-20260912_160551-8ajptlr6/) | [72kod1l1](../wandb/run-20260912_235355-72kod1l1/) |
-|  |  | 0.1 | [46irk5n0](../wandb/run-20260911_152108-46irk5n0/) | [j93405lt](../wandb/run-20260912_164144-j93405lt/) | [ijbxm5o4](../wandb/run-20260913_000258-ijbxm5o4/) |
-|  |  | 1 | [1pu0pgz5](../wandb/run-20260911_194543-1pu0pgz5/) | [m3sgoeq3](../wandb/run-20260912_214711-m3sgoeq3/) | [9ajf4q7j](../wandb/run-20260913_002801-9ajf4q7j/) |
-|  | `taylor_green` | 0 | [pab42ujk](../wandb/run-20260911_234645-pab42ujk/) | [ex3985tz](../wandb/run-20260912_000821-ex3985tz/) | [pj57jrk6](../wandb/run-20260912_002145-pj57jrk6/) |
-|  |  | 0.001 | [htalvo6t](../wandb/run-20260911_145140-htalvo6t/) | [cs8wu78w](../wandb/run-20260911_182203-cs8wu78w/) | [rjwakiom](../wandb/run-20260911_201618-rjwakiom/) |
-|  |  | 0.01 | [pqxktgp0](../wandb/run-20260911_150525-pqxktgp0/) | [pqk0bh1n](../wandb/run-20260911_201623-pqk0bh1n/) | [8fzbkism](../wandb/run-20260911_202332-8fzbkism/) |
-|  |  | 0.1 | [cerc1d4p](../wandb/run-20260911_152059-cerc1d4p/) | [ikn98daa](../wandb/run-20260911_201623-ikn98daa/) | [swo0z9zi](../wandb/run-20260911_221420-swo0z9zi/) |
-|  |  | 1 | [28p66xrs](../wandb/run-20260911_170913-28p66xrs/) | [oqunmwpw](../wandb/run-20260911_201623-oqunmwpw/) | [x8zxzf76](../wandb/run-20260911_232802-x8zxzf76/) |
-|  | `taylor_green_coeffs` | 0 | [a9ooy2wd](../wandb/run-20260911_234947-a9ooy2wd/) | [lo4au5wi](../wandb/run-20260912_000821-lo4au5wi/) | [9g4xmct5](../wandb/run-20260912_002554-9g4xmct5/) |
-|  |  | 0.001 | [624dqz15](../wandb/run-20260911_145411-624dqz15/) | [b8dw35r3](../wandb/run-20260911_183621-b8dw35r3/) | [3uv3pdh9](../wandb/run-20260911_201618-3uv3pdh9/) |
-|  |  | 0.01 | [6u5cwuv8](../wandb/run-20260911_150658-6u5cwuv8/) | [fxclt41s](../wandb/run-20260911_201623-fxclt41s/) | [49ruzhi5](../wandb/run-20260911_202332-49ruzhi5/) |
-|  |  | 0.1 | [4frnyp99](../wandb/run-20260911_152059-4frnyp99/) | [itdr9bd6](../wandb/run-20260911_201623-itdr9bd6/) | [sjpjs0ix](../wandb/run-20260911_221801-sjpjs0ix/) |
-|  |  | 1 | [0xkxhigv](../wandb/run-20260911_175128-0xkxhigv/) | [eye1c47x](../wandb/run-20260911_201623-eye1c47x/) | [1i4wpvq5](../wandb/run-20260911_232803-1i4wpvq5/) |
-|  | `taylor_green_spacetime` | 0 | [tkxk8455](../wandb/run-20260912_000135-tkxk8455/) | [2mjpezul](../wandb/run-20260912_001026-2mjpezul/) | [v9m0rnyn](../wandb/run-20260912_002554-v9m0rnyn/) |
-|  |  | 0.001 | [hcp20npc](../wandb/run-20260911_145549-hcp20npc/) | [wu95knfa](../wandb/run-20260911_190909-wu95knfa/) | [19n79ktf](../wandb/run-20260911_201623-19n79ktf/) |
-|  |  | 0.01 | [0amwh0rl](../wandb/run-20260911_150912-0amwh0rl/) | [tjnlb9ej](../wandb/run-20260911_201618-tjnlb9ej/) | [wa1p27rs](../wandb/run-20260911_204128-wa1p27rs/) |
-|  |  | 0.1 | [9dr2xxwx](../wandb/run-20260911_152059-9dr2xxwx/) | [vn67682j](../wandb/run-20260911_201623-vn67682j/) | [xuhry5ad](../wandb/run-20260911_221801-xuhry5ad/) |
-|  |  | 1 | [sjc14d3b](../wandb/run-20260911_175611-sjc14d3b/) | [0asmxckc](../wandb/run-20260911_201623-0asmxckc/) | [vn412rw7](../wandb/run-20260911_232803-vn412rw7/) |
-|  | `taylor_green_spacetime_coeffs` | 0 | [r7stmp01](../wandb/run-20260911_235558-r7stmp01/) | [n0yrjtzc](../wandb/run-20260912_001025-n0yrjtzc/) | [obknm49p](../wandb/run-20260912_002554-obknm49p/) |
-|  |  | 0.001 | [6ehtv0cv](../wandb/run-20260911_145541-6ehtv0cv/) | [8ca714uq](../wandb/run-20260911_192409-8ca714uq/) | [fkl16fnr](../wandb/run-20260911_201623-fkl16fnr/) |
-|  |  | 0.01 | [5ucid0l6](../wandb/run-20260911_150904-5ucid0l6/) | [h5cxl7p9](../wandb/run-20260911_201618-h5cxl7p9/) | [gcrrdd4y](../wandb/run-20260911_204432-gcrrdd4y/) |
-|  |  | 0.1 | [q106r6bj](../wandb/run-20260911_152204-q106r6bj/) | [5e8uurf8](../wandb/run-20260911_201623-5e8uurf8/) | [malpt36k](../wandb/run-20260911_222437-malpt36k/) |
-|  |  | 1 | [x9z79vx4](../wandb/run-20260911_175611-x9z79vx4/) | [pc0x5fw6](../wandb/run-20260911_201623-pc0x5fw6/) | [8vshmjid](../wandb/run-20260911_233305-8vshmjid/) |
-|  | `merge_vortices_easier` | 0 | [aao4cuai](../wandb/run-20260912_000308-aao4cuai/) | [n6x347xd](../wandb/run-20260912_001158-n6x347xd/) | [y5oofven](../wandb/run-20260912_002656-y5oofven/) |
-|  |  | 0.001 | [uea8ryex](../wandb/run-20260911_145620-uea8ryex/) | [g7jv0o3m](../wandb/run-20260911_194411-g7jv0o3m/) | [60kwn7o3](../wandb/run-20260911_201623-60kwn7o3/) |
-|  |  | 0.01 | [b0l82o2r](../wandb/run-20260911_151038-b0l82o2r/) | [gviy8e31](../wandb/run-20260911_201618-gviy8e31/) | [sg2vjt18](../wandb/run-20260911_213320-sg2vjt18/) |
-|  |  | 0.1 | [azwf5mek](../wandb/run-20260911_152509-azwf5mek/) | [soxmmkbw](../wandb/run-20260911_201623-soxmmkbw/) | [v1hl88bn](../wandb/run-20260911_222437-v1hl88bn/) |
-|  |  | 1 | [12ucd5hg](../wandb/run-20260911_175741-12ucd5hg/) | [okpir40o](../wandb/run-20260911_201623-okpir40o/) | [iyqc0mv4](../wandb/run-20260911_233400-iyqc0mv4/) |
-|  | `species_transport` | 0 | [0qmutkrp](../wandb/run-20260912_000308-0qmutkrp/) | [lys1koon](../wandb/run-20260912_001330-lys1koon/) | [zsqmf0d4](../wandb/run-20260912_002656-zsqmf0d4/) |
-|  |  | 0.001 | [3wpvsn9k](../wandb/run-20260911_145753-3wpvsn9k/) | [3lqa62k7](../wandb/run-20260911_194543-3lqa62k7/) | [03xbpq7a](../wandb/run-20260911_201623-03xbpq7a/) |
-|  |  | 0.01 | [jz82d80c](../wandb/run-20260911_151636-jz82d80c/) | [qb32n87l](../wandb/run-20260911_201618-qb32n87l/) | [baflxyd7](../wandb/run-20260911_213954-baflxyd7/) |
-|  |  | 0.1 | [qsmmkez3](../wandb/run-20260911_153117-qsmmkez3/) | [0w4gmjdw](../wandb/run-20260911_201621-0w4gmjdw/) | [ozvzbuds](../wandb/run-20260911_223118-ozvzbuds/) |
-|  |  | 1 | [w6iec4ej](../wandb/run-20260911_175911-w6iec4ej/) | [ea81gu7b](../wandb/run-20260911_201623-ea81gu7b/) | [g6tkq5hq](../wandb/run-20260911_233400-g6tkq5hq/) |
-| Transolver | `backward_facing_step` | 0 | [5cbzvmiy](../wandb/run-20260911_234445-5cbzvmiy/) | [s2f6ow9m](../wandb/run-20260912_201720-s2f6ow9m/) | [hs1eqr8i](../wandb/run-20260912_230611-hs1eqr8i/) |
-|  |  | 0.001 | [bjgsdnqe](../wandb/run-20260911_145104-bjgsdnqe/) | [s9blvm9i](../wandb/run-20260911_205751-s9blvm9i/) | [q1k32a9r](../wandb/run-20260911_214431-q1k32a9r/) |
-|  |  | 0.01 | [dq0ug68q](../wandb/run-20260911_150330-dq0ug68q/) | [zkyxkcds](../wandb/run-20260911_210809-zkyxkcds/) | [5hqycsca](../wandb/run-20260911_225949-5hqycsca/) |
-|  |  | 0.1 | [msoreepr](../wandb/run-20260911_152010-msoreepr/) | [kcxk4b8x](../wandb/run-20260911_213025-kcxk4b8x/) | [5tg0x07a](../wandb/run-20260911_230255-5tg0x07a/) |
-|  |  | 1 | [djnzes7c](../wandb/run-20260911_185045-djnzes7c/) | [ez1yej4g](../wandb/run-20260911_213823-ez1yej4g/) | [rj3lvs5r](../wandb/run-20260911_232803-rj3lvs5r/) |
-|  | `flow_cylinder_laminar` | 0 | [ikuf3pcl](../wandb/run-20260911_234320-ikuf3pcl/) | [1nkh0rur](../wandb/run-20260912_155617-1nkh0rur/) | [xp97nnpl](../wandb/run-20260912_223402-xp97nnpl/) |
-|  |  | 0.001 | [i39xsi90](../wandb/run-20260911_144940-i39xsi90/) | [q1qr7bv0](../wandb/run-20260911_194934-q1qr7bv0/) | [oouiqcpj](../wandb/run-20260911_214309-oouiqcpj/) |
-|  |  | 0.01 | [u51axn0p](../wandb/run-20260911_150018-u51axn0p/) | [idt8fit6](../wandb/run-20260911_210431-idt8fit6/) | [93x4f2z8](../wandb/run-20260911_224801-93x4f2z8/) |
-|  |  | 0.1 | [hj59wiwm](../wandb/run-20260911_151903-hj59wiwm/) | [04ujce2f](../wandb/run-20260911_212539-04ujce2f/) | [bo64f588](../wandb/run-20260911_230255-bo64f588/) |
-|  |  | 1 | [gpruhtf7](../wandb/run-20260911_153528-gpruhtf7/) | [jt57afgb](../wandb/run-20260911_213320-jt57afgb/) | [si8bo278](../wandb/run-20260911_232518-si8bo278/) |
-|  | `flow_cylinder_shedding` | 0 | [2qkm11s9](../wandb/run-20260911_234446-2qkm11s9/) | [54136p96](../wandb/run-20260912_155815-54136p96/) | [y22ymvh5](../wandb/run-20260912_224101-y22ymvh5/) |
-|  |  | 0.001 | [gdank786](../wandb/run-20260911_144940-gdank786/) | [ot8sz7h2](../wandb/run-20260911_195131-ot8sz7h2/) | [8etgosm6](../wandb/run-20260911_214309-8etgosm6/) |
-|  |  | 0.01 | [dvm7tv86](../wandb/run-20260911_150056-dvm7tv86/) | [ki664fjv](../wandb/run-20260911_210431-ki664fjv/) | [nus5xyph](../wandb/run-20260911_225949-nus5xyph/) |
-|  |  | 0.1 | [e9rgd7yf](../wandb/run-20260911_152002-e9rgd7yf/) | [5gjyyjai](../wandb/run-20260911_212539-5gjyyjai/) | [0gp726sz](../wandb/run-20260911_230255-0gp726sz/) |
-|  |  | 1 | [ld914d5w](../wandb/run-20260911_164912-ld914d5w/) | [a42nbibb](../wandb/run-20260911_213522-a42nbibb/) | [sf959c8d](../wandb/run-20260911_232518-sf959c8d/) |
-|  | `lid_cavity_flow` | 0 | [do40p8xq](../wandb/run-20260911_234446-do40p8xq/) | [5t2hmcp8](../wandb/run-20260912_160500-5t2hmcp8/) | [kklefqk4](../wandb/run-20260912_230016-kklefqk4/) |
-|  |  | 0.001 | [z0fdlgvh](../wandb/run-20260911_145112-z0fdlgvh/) | [9nj6bc1k](../wandb/run-20260911_201954-9nj6bc1k/) | [3tb4qndw](../wandb/run-20260911_214309-3tb4qndw/) |
-|  |  | 0.01 | [h87a15yl](../wandb/run-20260911_150150-h87a15yl/) | [0zf9xuyz](../wandb/run-20260911_210809-0zf9xuyz/) | [i3hykrq4](../wandb/run-20260911_225950-i3hykrq4/) |
-|  |  | 0.1 | [ejr317wm](../wandb/run-20260911_152003-ejr317wm/) | [y49l16xp](../wandb/run-20260911_213025-y49l16xp/) | [emh50bl0](../wandb/run-20260911_230255-emh50bl0/) |
-|  |  | 1 | [6u0m5miy](../wandb/run-20260911_180756-6u0m5miy/) | [ronkkkqy](../wandb/run-20260911_213654-ronkkkqy/) | [zj5m7uzt](../wandb/run-20260911_232807-zj5m7uzt/) |
-|  | `buoyancy_cavity_flow` | 0 | [dr5cvy6p](../wandb/run-20260911_234647-dr5cvy6p/) | [x41prbl4](../wandb/run-20260912_202811-x41prbl4/) | [3sjhbspd](../wandb/run-20260912_234901-3sjhbspd/) |
-|  |  | 0.001 | [uxnfptez](../wandb/run-20260911_145138-uxnfptez/) | [nqw1purh](../wandb/run-20260911_205922-nqw1purh/) | [glyn2av7](../wandb/run-20260911_214431-glyn2av7/) |
-|  |  | 0.01 | [6vsk03ou](../wandb/run-20260911_150355-6vsk03ou/) | [o59ogu5c](../wandb/run-20260911_210809-o59ogu5c/) | [5np7yjqw](../wandb/run-20260911_230252-5np7yjqw/) |
-|  |  | 0.1 | [33b8ikmj](../wandb/run-20260911_152100-33b8ikmj/) | [fd58bhvi](../wandb/run-20260911_213025-fd58bhvi/) | [wf85okv0](../wandb/run-20260911_230421-wf85okv0/) |
-|  |  | 1 | [2bbrtx8e](../wandb/run-20260911_185212-2bbrtx8e/) | [y55gx5fm](../wandb/run-20260911_213823-y55gx5fm/) | [3mjdujqu](../wandb/run-20260911_232803-3mjdujqu/) |
-|  | `taylor_green` | 0 | [c4wbtisw](../wandb/run-20260911_234646-c4wbtisw/) | [cq0ud9qu](../wandb/run-20260912_214511-cq0ud9qu/) | [v8xp1nfb](../wandb/run-20260912_235356-v8xp1nfb/) |
-|  |  | 0.001 | [ougpjjp6](../wandb/run-20260911_145314-ougpjjp6/) | [q0k8266t](../wandb/run-20260911_210108-q0k8266t/) | [10bkljil](../wandb/run-20260911_214633-10bkljil/) |
-|  |  | 0.01 | [ltxj4xkw](../wandb/run-20260911_150526-ltxj4xkw/) | [0ihoxrs3](../wandb/run-20260911_211016-0ihoxrs3/) | [1judymnw](../wandb/run-20260911_230253-1judymnw/) |
-|  |  | 0.1 | [9gr3e052](../wandb/run-20260911_152109-9gr3e052/) | [990rpp1j](../wandb/run-20260911_213021-990rpp1j/) | [3ac14lkv](../wandb/run-20260911_230421-3ac14lkv/) |
-|  |  | 1 | [t6imxk42](../wandb/run-20260911_185255-t6imxk42/) | [m7py8977](../wandb/run-20260911_213823-m7py8977/) | [0x97sc6y](../wandb/run-20260911_232803-0x97sc6y/) |
-|  | `taylor_green_coeffs` | 0 | [gm655o1s](../wandb/run-20260911_235301-gm655o1s/) | [djye9c5u](../wandb/run-20260912_215522-djye9c5u/) | [bqbv4b1j](../wandb/run-20260912_235701-bqbv4b1j/) |
-|  |  | 0.001 | [6a6v3v13](../wandb/run-20260911_145543-6a6v3v13/) | [88qwt8wj](../wandb/run-20260911_210108-88qwt8wj/) | [kwo39eiq](../wandb/run-20260911_214633-kwo39eiq/) |
-|  |  | 0.01 | [d8953w0c](../wandb/run-20260911_150807-d8953w0c/) | [ysg3g12f](../wandb/run-20260911_211016-ysg3g12f/) | [1lzm9126](../wandb/run-20260911_230253-1lzm9126/) |
-|  |  | 0.1 | [7dwr41si](../wandb/run-20260911_152100-7dwr41si/) | [5ljkauji](../wandb/run-20260911_213022-5ljkauji/) | [4ehiitsv](../wandb/run-20260911_230554-4ehiitsv/) |
-|  |  | 1 | [wg5zpvn1](../wandb/run-20260911_191755-wg5zpvn1/) | [c857ct0n](../wandb/run-20260911_213957-c857ct0n/) | [u6e675x6](../wandb/run-20260911_232803-u6e675x6/) |
-|  | `taylor_green_spacetime` | 0 | [staf5qhm](../wandb/run-20260912_001027-staf5qhm/) | [qq1lpgbs](../wandb/run-20260912_220304-qq1lpgbs/) | [sihyu01k](../wandb/run-20260912_235703-sihyu01k/) |
-|  |  | 0.001 | [dkg38fuh](../wandb/run-20260911_145543-dkg38fuh/) | [fvjsrgqj](../wandb/run-20260911_210308-fvjsrgqj/) | [8jiw3pw8](../wandb/run-20260911_214633-8jiw3pw8/) |
-|  |  | 0.01 | [zs3c7igz](../wandb/run-20260911_150916-zs3c7igz/) | [tht0cgh6](../wandb/run-20260911_211016-tht0cgh6/) | [vbjcjz4s](../wandb/run-20260911_230253-vbjcjz4s/) |
-|  |  | 0.1 | [i7q7f69y](../wandb/run-20260911_152146-i7q7f69y/) | [r34jboxe](../wandb/run-20260911_213151-r34jboxe/) | [alzppz3f](../wandb/run-20260911_232043-alzppz3f/) |
-|  |  | 1 | [uuwsh5cc](../wandb/run-20260911_192039-uuwsh5cc/) | [8vm9tacs](../wandb/run-20260911_213957-8vm9tacs/) | [r4mtlj3y](../wandb/run-20260911_233307-r4mtlj3y/) |
-|  | `taylor_green_spacetime_coeffs` | 0 | [904fxoye](../wandb/run-20260912_003303-904fxoye/) | [gvxvbpxi](../wandb/run-20260912_222258-gvxvbpxi/) | [f9zo85x6](../wandb/run-20260912_235703-f9zo85x6/) |
-|  |  | 0.001 | [fg75wg1y](../wandb/run-20260911_145552-fg75wg1y/) | [j28pu92e](../wandb/run-20260911_210308-j28pu92e/) | [kv9drupk](../wandb/run-20260911_223613-kv9drupk/) |
-|  |  | 0.01 | [xnmltmr1](../wandb/run-20260911_151038-xnmltmr1/) | [aoq4q5dy](../wandb/run-20260911_211016-aoq4q5dy/) | [fd0j2vls](../wandb/run-20260911_230257-fd0j2vls/) |
-|  |  | 0.1 | [8hyuhx1e](../wandb/run-20260911_152341-8hyuhx1e/) | [3bavbenw](../wandb/run-20260911_213151-3bavbenw/) | [oz9giiwk](../wandb/run-20260911_232043-oz9giiwk/) |
-|  |  | 1 | [9muxpbjb](../wandb/run-20260911_193121-9muxpbjb/) | [9om4nz8f](../wandb/run-20260911_213957-9om4nz8f/) | [bmasdgge](../wandb/run-20260911_233709-bmasdgge/) |
-|  | `merge_vortices_easier` | 0 | [spxlfy91](../wandb/run-20260912_120933-spxlfy91/) | [d5mrykhs](../wandb/run-20260912_195220-d5mrykhs/) | [qv9udj8i](../wandb/run-20260913_001305-qv9udj8i/) |
-|  |  | 0.001 | [t8ps8yk8](../wandb/run-20260911_145614-t8ps8yk8/) | [1hun1hvn](../wandb/run-20260911_210308-1hun1hvn/) | [xa9wuku9](../wandb/run-20260911_223746-xa9wuku9/) |
-|  |  | 0.01 | [cxpqw5p3](../wandb/run-20260911_151639-cxpqw5p3/) | [d2yg2531](../wandb/run-20260911_211014-d2yg2531/) | [khlpo0mm](../wandb/run-20260911_230257-khlpo0mm/) |
-|  |  | 0.1 | [mvky47nl](../wandb/run-20260911_152510-mvky47nl/) | [d45hn6he](../wandb/run-20260911_213321-d45hn6he/) | [vrhgswty](../wandb/run-20260911_232043-vrhgswty/) |
-|  |  | 1 | [6p24tu6w](../wandb/run-20260911_193326-6p24tu6w/) | [239bqm0q](../wandb/run-20260911_213955-239bqm0q/) | [2e6jvbot](../wandb/run-20260911_234315-2e6jvbot/) |
-|  | `species_transport` | 0 | [m2faa885](../wandb/run-20260912_133642-m2faa885/) | [qt3xwkcr](../wandb/run-20260912_223058-qt3xwkcr/) | [bs3wpnma](../wandb/run-20260913_002901-bs3wpnma/) |
-|  |  | 0.001 | [wbkq3f72](../wandb/run-20260911_145746-wbkq3f72/) | [idtu5hrg](../wandb/run-20260911_210431-idtu5hrg/) | [wfmshh1u](../wandb/run-20260911_224454-wfmshh1u/) |
-|  |  | 0.01 | [a2hjiy0y](../wandb/run-20260911_151821-a2hjiy0y/) | [6o2722r4](../wandb/run-20260911_212539-6o2722r4/) | [hef3epj4](../wandb/run-20260911_230257-hef3epj4/) |
-|  |  | 0.1 | [glp7wjjt](../wandb/run-20260911_153322-glp7wjjt/) | [nyq1fl1j](../wandb/run-20260911_213321-nyq1fl1j/) | [ybnvm7gt](../wandb/run-20260911_232521-ybnvm7gt/) |
-|  |  | 1 | [274fgfz6](../wandb/run-20260911_193908-274fgfz6/) | [glu0sz46](../wandb/run-20260911_214309-glu0sz46/) | [ba67nb31](../wandb/run-20260911_234312-ba67nb31/) |
+| Framework | Dataset ID | ntrain | $\lambda$ | Seed 1 | Seed 2 | Seed 3 |
+|---|---|---:|---:|---|---|---|
+| Geo-FNO | `backward_facing_step` | 500 | 0 | [ycxutvm3](../wandb_final/wandb/run-20260911_233838-ycxutvm3/) | [635kjgnn](../wandb_final/wandb/run-20260912_000649-635kjgnn/) | [8b91c797](../wandb_final/wandb/run-20260912_002007-8b91c797/) |
+|  |  | 500 | 0.001 | [h7oj0a4x](../wandb_final/wandb/run-20260911_145108-h7oj0a4x/) | [ir1kjgo3](../wandb_final/wandb/run-20260911_180045-ir1kjgo3/) | [33310qmo](../wandb_final/wandb/run-20260911_201618-33310qmo/) |
+|  |  | 500 | 0.01 | [74jn4i2m](../wandb_final/wandb/run-20260911_150222-74jn4i2m/) | [fhrzluqe](../wandb_final/wandb/run-20260911_201623-fhrzluqe/) | [yj07iw9i](../wandb_final/wandb/run-20260911_202332-yj07iw9i/) |
+|  |  | 500 | 0.1 | [f8vj489k](../wandb_final/wandb/run-20260911_152007-f8vj489k/) | [983yerdp](../wandb_final/wandb/run-20260911_201623-983yerdp/) | [5cxxovm1](../wandb_final/wandb/run-20260911_220947-5cxxovm1/) |
+|  |  | 500 | 1 | [5ffp5e5r](../wandb_final/wandb/run-20260911_170403-5ffp5e5r/) | [iu8aiuei](../wandb_final/wandb/run-20260911_201621-iu8aiuei/) | [peeaz7va](../wandb_final/wandb/run-20260911_232802-peeaz7va/) |
+|  | `flow_cylinder_laminar` | 100 | 0 | [2m13e23v](../wandb_final/wandb/run-20260911_233400-2m13e23v/) | [vdw7cuzo](../wandb_final/wandb/run-20260912_000649-vdw7cuzo/) | [ttfvriio](../wandb_final/wandb/run-20260912_001705-ttfvriio/) |
+|  |  | 100 | 0.001 | [cj9415e3](../wandb_final/wandb/run-20260911_144936-cj9415e3/) | [2k4n5qkb](../wandb_final/wandb/run-20260911_180046-2k4n5qkb/) | [opnsfg7s](../wandb_final/wandb/run-20260911_201623-opnsfg7s/) |
+|  |  | 100 | 0.01 | [rwtg4ak3](../wandb_final/wandb/run-20260911_145745-rwtg4ak3/) | [78hv2jrf](../wandb_final/wandb/run-20260911_195130-78hv2jrf/) | [0pq71utq](../wandb_final/wandb/run-20260911_201750-0pq71utq/) |
+|  |  | 100 | 0.1 | [by13yr9t](../wandb_final/wandb/run-20260911_151819-by13yr9t/) | [t1gn9lvk](../wandb_final/wandb/run-20260911_201623-t1gn9lvk/) | [50latx00](../wandb_final/wandb/run-20260911_215942-50latx00/) |
+|  |  | 100 | 1 | [gj77wdpy](../wandb_final/wandb/run-20260911_153526-gj77wdpy/) | [e6vdv7a2](../wandb_final/wandb/run-20260911_201621-e6vdv7a2/) | [tenuodn3](../wandb_final/wandb/run-20260911_225447-tenuodn3/) |
+|  | `flow_cylinder_shedding` | 10000 | 0 | [99ns0put](../wandb_final/wandb/run-20260912_204212-99ns0put/) | [oumxu1rv](../wandb_final/wandb/run-20260912_212413-oumxu1rv/) | [zlv5gclw](../wandb_final/wandb/run-20260912_233900-zlv5gclw/) |
+|  |  | 10000 | 0.001 | [njtv50p4](../wandb_final/wandb/run-20260911_144936-njtv50p4/) | [9b2gs67a](../wandb_final/wandb/run-20260911_222604-9b2gs67a/) | [vqyfx19x](../wandb_final/wandb/run-20260912_165151-vqyfx19x/) |
+|  |  | 10000 | 0.01 | [qe4rqkfm](../wandb_final/wandb/run-20260911_150024-qe4rqkfm/) | [8aad13gp](../wandb_final/wandb/run-20260911_224329-8aad13gp/) | [9g7owsw9](../wandb_final/wandb/run-20260912_200011-9g7owsw9/) |
+|  |  | 10000 | 0.1 | [d1z8hba9](../wandb_final/wandb/run-20260911_151900-d1z8hba9/) | [fjanuags](../wandb_final/wandb/run-20260912_134238-fjanuags/) | [xi05tesn](../wandb_final/wandb/run-20260912_201913-xi05tesn/) |
+|  |  | 10000 | 1 | [fx8ywn9z](../wandb_final/wandb/run-20260911_153533-fx8ywn9z/) | [9uknzwsw](../wandb_final/wandb/run-20260912_164846-9uknzwsw/) | [jy6b4evq](../wandb_final/wandb/run-20260912_202111-jy6b4evq/) |
+|  | `lid_cavity_flow` | 10000 | 0 | [cnugxlp3](../wandb_final/wandb/run-20260911_233400-cnugxlp3/) | [mfk11cbh](../wandb_final/wandb/run-20260912_000649-mfk11cbh/) | [8dnhozi9](../wandb_final/wandb/run-20260912_001834-8dnhozi9/) |
+|  |  | 10000 | 0.001 | [gvswajsn](../wandb_final/wandb/run-20260911_145010-gvswajsn/) | [qy3rbqx6](../wandb_final/wandb/run-20260911_180045-qy3rbqx6/) | [x5mmzme5](../wandb_final/wandb/run-20260911_201623-x5mmzme5/) |
+|  |  | 10000 | 0.01 | [yvsn8dn5](../wandb_final/wandb/run-20260911_150148-yvsn8dn5/) | [jo0atf8r](../wandb_final/wandb/run-20260911_201623-jo0atf8r/) | [sse7hmwg](../wandb_final/wandb/run-20260911_202159-sse7hmwg/) |
+|  |  | 10000 | 0.1 | [w96njh22](../wandb_final/wandb/run-20260911_152001-w96njh22/) | [n3bvumaj](../wandb_final/wandb/run-20260911_201623-n3bvumaj/) | [rs81lrpi](../wandb_final/wandb/run-20260911_220947-rs81lrpi/) |
+|  |  | 10000 | 1 | [t4qxma0g](../wandb_final/wandb/run-20260911_170108-t4qxma0g/) | [6jinerk7](../wandb_final/wandb/run-20260911_201621-6jinerk7/) | [qa2aiue0](../wandb_final/wandb/run-20260911_232804-qa2aiue0/) |
+|  | `buoyancy_cavity_flow` | 10000 | 0 | [u20b6v2g](../wandb_final/wandb/run-20260913_015653-u20b6v2g/) | [g6e661vm](../wandb_final/wandb/run-20260913_020049-g6e661vm/) | [zc2993lc](../wandb_final/wandb/run-20260913_020449-zc2993lc/) |
+|  |  | 10000 | 0.001 | [7pc8agtw](../wandb_final/wandb/run-20260911_145110-7pc8agtw/) | [gryumiyo](../wandb_final/wandb/run-20260912_152422-gryumiyo/) | [cn0fnrwc](../wandb_final/wandb/run-20260912_231058-cn0fnrwc/) |
+|  |  | 10000 | 0.01 | [7wgfs8qe](../wandb_final/wandb/run-20260911_150325-7wgfs8qe/) | [8ajptlr6](../wandb_final/wandb/run-20260912_160551-8ajptlr6/) | [72kod1l1](../wandb_final/wandb/run-20260912_235355-72kod1l1/) |
+|  |  | 10000 | 0.1 | [46irk5n0](../wandb_final/wandb/run-20260911_152108-46irk5n0/) | [j93405lt](../wandb_final/wandb/run-20260912_164144-j93405lt/) | [ijbxm5o4](../wandb_final/wandb/run-20260913_000258-ijbxm5o4/) |
+|  |  | 10000 | 1 | [1pu0pgz5](../wandb_final/wandb/run-20260911_194543-1pu0pgz5/) | [m3sgoeq3](../wandb_final/wandb/run-20260912_214711-m3sgoeq3/) | [9ajf4q7j](../wandb_final/wandb/run-20260913_002801-9ajf4q7j/) |
+|  | `taylor_green` | 5000 | 0 | [pab42ujk](../wandb_final/wandb/run-20260911_234645-pab42ujk/) | [ex3985tz](../wandb_final/wandb/run-20260912_000821-ex3985tz/) | [pj57jrk6](../wandb_final/wandb/run-20260912_002145-pj57jrk6/) |
+|  |  | 5000 | 0.001 | [htalvo6t](../wandb_final/wandb/run-20260911_145140-htalvo6t/) | [cs8wu78w](../wandb_final/wandb/run-20260911_182203-cs8wu78w/) | [rjwakiom](../wandb_final/wandb/run-20260911_201618-rjwakiom/) |
+|  |  | 5000 | 0.01 | [pqxktgp0](../wandb_final/wandb/run-20260911_150525-pqxktgp0/) | [pqk0bh1n](../wandb_final/wandb/run-20260911_201623-pqk0bh1n/) | [8fzbkism](../wandb_final/wandb/run-20260911_202332-8fzbkism/) |
+|  |  | 5000 | 0.1 | [cerc1d4p](../wandb_final/wandb/run-20260911_152059-cerc1d4p/) | [ikn98daa](../wandb_final/wandb/run-20260911_201623-ikn98daa/) | [swo0z9zi](../wandb_final/wandb/run-20260911_221420-swo0z9zi/) |
+|  |  | 5000 | 1 | [28p66xrs](../wandb_final/wandb/run-20260911_170913-28p66xrs/) | [oqunmwpw](../wandb_final/wandb/run-20260911_201623-oqunmwpw/) | [x8zxzf76](../wandb_final/wandb/run-20260911_232802-x8zxzf76/) |
+|  | `taylor_green_coeffs` | 5000 | 0 | [a9ooy2wd](../wandb_final/wandb/run-20260911_234947-a9ooy2wd/) | [lo4au5wi](../wandb_final/wandb/run-20260912_000821-lo4au5wi/) | [9g4xmct5](../wandb_final/wandb/run-20260912_002554-9g4xmct5/) |
+|  |  | 5000 | 0.001 | [624dqz15](../wandb_final/wandb/run-20260911_145411-624dqz15/) | [b8dw35r3](../wandb_final/wandb/run-20260911_183621-b8dw35r3/) | [3uv3pdh9](../wandb_final/wandb/run-20260911_201618-3uv3pdh9/) |
+|  |  | 5000 | 0.01 | [6u5cwuv8](../wandb_final/wandb/run-20260911_150658-6u5cwuv8/) | [fxclt41s](../wandb_final/wandb/run-20260911_201623-fxclt41s/) | [49ruzhi5](../wandb_final/wandb/run-20260911_202332-49ruzhi5/) |
+|  |  | 5000 | 0.1 | [4frnyp99](../wandb_final/wandb/run-20260911_152059-4frnyp99/) | [itdr9bd6](../wandb_final/wandb/run-20260911_201623-itdr9bd6/) | [sjpjs0ix](../wandb_final/wandb/run-20260911_221801-sjpjs0ix/) |
+|  |  | 5000 | 1 | [0xkxhigv](../wandb_final/wandb/run-20260911_175128-0xkxhigv/) | [eye1c47x](../wandb_final/wandb/run-20260911_201623-eye1c47x/) | [1i4wpvq5](../wandb_final/wandb/run-20260911_232803-1i4wpvq5/) |
+|  | `taylor_green_spacetime` | 5000 | 0 | [tkxk8455](../wandb_final/wandb/run-20260912_000135-tkxk8455/) | [2mjpezul](../wandb_final/wandb/run-20260912_001026-2mjpezul/) | [v9m0rnyn](../wandb_final/wandb/run-20260912_002554-v9m0rnyn/) |
+|  |  | 5000 | 0.001 | [hcp20npc](../wandb_final/wandb/run-20260911_145549-hcp20npc/) | [wu95knfa](../wandb_final/wandb/run-20260911_190909-wu95knfa/) | [19n79ktf](../wandb_final/wandb/run-20260911_201623-19n79ktf/) |
+|  |  | 5000 | 0.01 | [0amwh0rl](../wandb_final/wandb/run-20260911_150912-0amwh0rl/) | [tjnlb9ej](../wandb_final/wandb/run-20260911_201618-tjnlb9ej/) | [wa1p27rs](../wandb_final/wandb/run-20260911_204128-wa1p27rs/) |
+|  |  | 5000 | 0.1 | [9dr2xxwx](../wandb_final/wandb/run-20260911_152059-9dr2xxwx/) | [vn67682j](../wandb_final/wandb/run-20260911_201623-vn67682j/) | [xuhry5ad](../wandb_final/wandb/run-20260911_221801-xuhry5ad/) |
+|  |  | 5000 | 1 | [sjc14d3b](../wandb_final/wandb/run-20260911_175611-sjc14d3b/) | [0asmxckc](../wandb_final/wandb/run-20260911_201623-0asmxckc/) | [vn412rw7](../wandb_final/wandb/run-20260911_232803-vn412rw7/) |
+|  | `taylor_green_spacetime_coeffs` | 5000 | 0 | [r7stmp01](../wandb_final/wandb/run-20260911_235558-r7stmp01/) | [n0yrjtzc](../wandb_final/wandb/run-20260912_001025-n0yrjtzc/) | [obknm49p](../wandb_final/wandb/run-20260912_002554-obknm49p/) |
+|  |  | 5000 | 0.001 | [6ehtv0cv](../wandb_final/wandb/run-20260911_145541-6ehtv0cv/) | [8ca714uq](../wandb_final/wandb/run-20260911_192409-8ca714uq/) | [fkl16fnr](../wandb_final/wandb/run-20260911_201623-fkl16fnr/) |
+|  |  | 5000 | 0.01 | [5ucid0l6](../wandb_final/wandb/run-20260911_150904-5ucid0l6/) | [h5cxl7p9](../wandb_final/wandb/run-20260911_201618-h5cxl7p9/) | [gcrrdd4y](../wandb_final/wandb/run-20260911_204432-gcrrdd4y/) |
+|  |  | 5000 | 0.1 | [q106r6bj](../wandb_final/wandb/run-20260911_152204-q106r6bj/) | [5e8uurf8](../wandb_final/wandb/run-20260911_201623-5e8uurf8/) | [malpt36k](../wandb_final/wandb/run-20260911_222437-malpt36k/) |
+|  |  | 5000 | 1 | [x9z79vx4](../wandb_final/wandb/run-20260911_175611-x9z79vx4/) | [pc0x5fw6](../wandb_final/wandb/run-20260911_201623-pc0x5fw6/) | [8vshmjid](../wandb_final/wandb/run-20260911_233305-8vshmjid/) |
+|  | `merge_vortices_easier` | 500 | 0 | [aao4cuai](../wandb_final/wandb/run-20260912_000308-aao4cuai/) | [n6x347xd](../wandb_final/wandb/run-20260912_001158-n6x347xd/) | [y5oofven](../wandb_final/wandb/run-20260912_002656-y5oofven/) |
+|  |  | 500 | 0.001 | [uea8ryex](../wandb_final/wandb/run-20260911_145620-uea8ryex/) | [g7jv0o3m](../wandb_final/wandb/run-20260911_194411-g7jv0o3m/) | [60kwn7o3](../wandb_final/wandb/run-20260911_201623-60kwn7o3/) |
+|  |  | 500 | 0.01 | [b0l82o2r](../wandb_final/wandb/run-20260911_151038-b0l82o2r/) | [gviy8e31](../wandb_final/wandb/run-20260911_201618-gviy8e31/) | [sg2vjt18](../wandb_final/wandb/run-20260911_213320-sg2vjt18/) |
+|  |  | 500 | 0.1 | [azwf5mek](../wandb_final/wandb/run-20260911_152509-azwf5mek/) | [soxmmkbw](../wandb_final/wandb/run-20260911_201623-soxmmkbw/) | [v1hl88bn](../wandb_final/wandb/run-20260911_222437-v1hl88bn/) |
+|  |  | 500 | 1 | [12ucd5hg](../wandb_final/wandb/run-20260911_175741-12ucd5hg/) | [okpir40o](../wandb_final/wandb/run-20260911_201623-okpir40o/) | [iyqc0mv4](../wandb_final/wandb/run-20260911_233400-iyqc0mv4/) |
+|  | `species_transport` | 10000 | 0 | [0qmutkrp](../wandb_final/wandb/run-20260912_000308-0qmutkrp/) | [lys1koon](../wandb_final/wandb/run-20260912_001330-lys1koon/) | [zsqmf0d4](../wandb_final/wandb/run-20260912_002656-zsqmf0d4/) |
+|  |  | 10000 | 0.001 | [3wpvsn9k](../wandb_final/wandb/run-20260911_145753-3wpvsn9k/) | [3lqa62k7](../wandb_final/wandb/run-20260911_194543-3lqa62k7/) | [03xbpq7a](../wandb_final/wandb/run-20260911_201623-03xbpq7a/) |
+|  |  | 10000 | 0.01 | [jz82d80c](../wandb_final/wandb/run-20260911_151636-jz82d80c/) | [qb32n87l](../wandb_final/wandb/run-20260911_201618-qb32n87l/) | [baflxyd7](../wandb_final/wandb/run-20260911_213954-baflxyd7/) |
+|  |  | 10000 | 0.1 | [qsmmkez3](../wandb_final/wandb/run-20260911_153117-qsmmkez3/) | [0w4gmjdw](../wandb_final/wandb/run-20260911_201621-0w4gmjdw/) | [ozvzbuds](../wandb_final/wandb/run-20260911_223118-ozvzbuds/) |
+|  |  | 10000 | 1 | [w6iec4ej](../wandb_final/wandb/run-20260911_175911-w6iec4ej/) | [ea81gu7b](../wandb_final/wandb/run-20260911_201623-ea81gu7b/) | [g6tkq5hq](../wandb_final/wandb/run-20260911_233400-g6tkq5hq/) |
+|  | `forced_turb` | 10000 | 0.001 | [sy20d9a4](../wandb_final/wandb/run-20260916_001243-sy20d9a4/) | — | — |
+|  |  | 10000 | 0.01 | [zu4bdbus](../wandb_final/wandb/run-20260916_030738-zu4bdbus/) | — | — |
+|  |  | 10000 | 0.1 | [u3jqtq0p](../wandb_final/wandb/run-20260916_034334-u3jqtq0p/) | — | — |
+|  |  | 10000 | 1 | [vkg3dplu](../wandb_final/wandb/run-20260916_035109-vkg3dplu/) | — | — |
+|  |  | 5000 | 0 | [c68ptqq8](../wandb_final/wandb/run-20260916_014209-c68ptqq8/) | — | — |
+|  |  | 1000 | 0 | [5igoh4h6](../wandb_final/wandb/run-20260915_021317-5igoh4h6/) | [ffsvzm7h](../wandb_final/wandb/run-20260915_022202-ffsvzm7h/) | [23ixpeqy](../wandb_final/wandb/run-20260915_024747-23ixpeqy/) |
+|  |  | 500 | 0 | [q8m7d3h6](../wandb_final/wandb/run-20260914_175010-q8m7d3h6/) | [hwjpgp1i](../wandb_final/wandb/run-20260914_190220-hwjpgp1i/) | [ttjuxnb5](../wandb_final/wandb/run-20260915_021037-ttjuxnb5/) |
+|  |  | 100 | 0 | [vvpmyw12](../wandb_final/wandb/run-20260914_164649-vvpmyw12/) | [7alv02kp](../wandb_final/wandb/run-20260914_183326-7alv02kp/) | [2jbruyxc](../wandb_final/wandb/run-20260915_014841-2jbruyxc/) |
+| Transolver | `backward_facing_step` | 500 | 0 | [5cbzvmiy](../wandb_final/wandb/run-20260911_234445-5cbzvmiy/) | [s2f6ow9m](../wandb_final/wandb/run-20260912_201720-s2f6ow9m/) | [hs1eqr8i](../wandb_final/wandb/run-20260912_230611-hs1eqr8i/) |
+|  |  | 500 | 0.001 | [bjgsdnqe](../wandb_final/wandb/run-20260911_145104-bjgsdnqe/) | [s9blvm9i](../wandb_final/wandb/run-20260911_205751-s9blvm9i/) | [q1k32a9r](../wandb_final/wandb/run-20260911_214431-q1k32a9r/) |
+|  |  | 500 | 0.01 | [dq0ug68q](../wandb_final/wandb/run-20260911_150330-dq0ug68q/) | [zkyxkcds](../wandb_final/wandb/run-20260911_210809-zkyxkcds/) | [5hqycsca](../wandb_final/wandb/run-20260911_225949-5hqycsca/) |
+|  |  | 500 | 0.1 | [msoreepr](../wandb_final/wandb/run-20260911_152010-msoreepr/) | [kcxk4b8x](../wandb_final/wandb/run-20260911_213025-kcxk4b8x/) | [5tg0x07a](../wandb_final/wandb/run-20260911_230255-5tg0x07a/) |
+|  |  | 500 | 1 | [djnzes7c](../wandb_final/wandb/run-20260911_185045-djnzes7c/) | [ez1yej4g](../wandb_final/wandb/run-20260911_213823-ez1yej4g/) | [rj3lvs5r](../wandb_final/wandb/run-20260911_232803-rj3lvs5r/) |
+|  | `flow_cylinder_laminar` | 100 | 0 | [ikuf3pcl](../wandb_final/wandb/run-20260911_234320-ikuf3pcl/) | [1nkh0rur](../wandb_final/wandb/run-20260912_155617-1nkh0rur/) | [xp97nnpl](../wandb_final/wandb/run-20260912_223402-xp97nnpl/) |
+|  |  | 100 | 0.001 | [i39xsi90](../wandb_final/wandb/run-20260911_144940-i39xsi90/) | [q1qr7bv0](../wandb_final/wandb/run-20260911_194934-q1qr7bv0/) | [oouiqcpj](../wandb_final/wandb/run-20260911_214309-oouiqcpj/) |
+|  |  | 100 | 0.01 | [u51axn0p](../wandb_final/wandb/run-20260911_150018-u51axn0p/) | [idt8fit6](../wandb_final/wandb/run-20260911_210431-idt8fit6/) | [93x4f2z8](../wandb_final/wandb/run-20260911_224801-93x4f2z8/) |
+|  |  | 100 | 0.1 | [hj59wiwm](../wandb_final/wandb/run-20260911_151903-hj59wiwm/) | [04ujce2f](../wandb_final/wandb/run-20260911_212539-04ujce2f/) | [bo64f588](../wandb_final/wandb/run-20260911_230255-bo64f588/) |
+|  |  | 100 | 1 | [gpruhtf7](../wandb_final/wandb/run-20260911_153528-gpruhtf7/) | [jt57afgb](../wandb_final/wandb/run-20260911_213320-jt57afgb/) | [si8bo278](../wandb_final/wandb/run-20260911_232518-si8bo278/) |
+|  | `flow_cylinder_shedding` | 10000 | 0 | [2qkm11s9](../wandb_final/wandb/run-20260911_234446-2qkm11s9/) | [54136p96](../wandb_final/wandb/run-20260912_155815-54136p96/) | [y22ymvh5](../wandb_final/wandb/run-20260912_224101-y22ymvh5/) |
+|  |  | 10000 | 0.001 | [gdank786](../wandb_final/wandb/run-20260911_144940-gdank786/) | [ot8sz7h2](../wandb_final/wandb/run-20260911_195131-ot8sz7h2/) | [8etgosm6](../wandb_final/wandb/run-20260911_214309-8etgosm6/) |
+|  |  | 10000 | 0.01 | [dvm7tv86](../wandb_final/wandb/run-20260911_150056-dvm7tv86/) | [ki664fjv](../wandb_final/wandb/run-20260911_210431-ki664fjv/) | [nus5xyph](../wandb_final/wandb/run-20260911_225949-nus5xyph/) |
+|  |  | 10000 | 0.1 | [e9rgd7yf](../wandb_final/wandb/run-20260911_152002-e9rgd7yf/) | [5gjyyjai](../wandb_final/wandb/run-20260911_212539-5gjyyjai/) | [0gp726sz](../wandb_final/wandb/run-20260911_230255-0gp726sz/) |
+|  |  | 10000 | 1 | [ld914d5w](../wandb_final/wandb/run-20260911_164912-ld914d5w/) | [a42nbibb](../wandb_final/wandb/run-20260911_213522-a42nbibb/) | [sf959c8d](../wandb_final/wandb/run-20260911_232518-sf959c8d/) |
+|  | `lid_cavity_flow` | 10000 | 0 | [do40p8xq](../wandb_final/wandb/run-20260911_234446-do40p8xq/) | [5t2hmcp8](../wandb_final/wandb/run-20260912_160500-5t2hmcp8/) | [kklefqk4](../wandb_final/wandb/run-20260912_230016-kklefqk4/) |
+|  |  | 10000 | 0.001 | [z0fdlgvh](../wandb_final/wandb/run-20260911_145112-z0fdlgvh/) | [9nj6bc1k](../wandb_final/wandb/run-20260911_201954-9nj6bc1k/) | [3tb4qndw](../wandb_final/wandb/run-20260911_214309-3tb4qndw/) |
+|  |  | 10000 | 0.01 | [h87a15yl](../wandb_final/wandb/run-20260911_150150-h87a15yl/) | [0zf9xuyz](../wandb_final/wandb/run-20260911_210809-0zf9xuyz/) | [i3hykrq4](../wandb_final/wandb/run-20260911_225950-i3hykrq4/) |
+|  |  | 10000 | 0.1 | [ejr317wm](../wandb_final/wandb/run-20260911_152003-ejr317wm/) | [y49l16xp](../wandb_final/wandb/run-20260911_213025-y49l16xp/) | [emh50bl0](../wandb_final/wandb/run-20260911_230255-emh50bl0/) |
+|  |  | 10000 | 1 | [6u0m5miy](../wandb_final/wandb/run-20260911_180756-6u0m5miy/) | [ronkkkqy](../wandb_final/wandb/run-20260911_213654-ronkkkqy/) | [zj5m7uzt](../wandb_final/wandb/run-20260911_232807-zj5m7uzt/) |
+|  | `buoyancy_cavity_flow` | 10000 | 0 | [dr5cvy6p](../wandb_final/wandb/run-20260911_234647-dr5cvy6p/) | [x41prbl4](../wandb_final/wandb/run-20260912_202811-x41prbl4/) | [3sjhbspd](../wandb_final/wandb/run-20260912_234901-3sjhbspd/) |
+|  |  | 10000 | 0.001 | [70g5xud9](../wandb_final/wandb/run-20260915_012616-70g5xud9/) | [w62ave0a](../wandb_final/wandb/run-20260915_024751-w62ave0a/) | [krmh3csu](../wandb_final/wandb/run-20260915_142930-krmh3csu/) |
+|  |  | 10000 | 0.01 | [knvswevi](../wandb_final/wandb/run-20260915_024748-knvswevi/) | [u8z0osmf](../wandb_final/wandb/run-20260915_024750-u8z0osmf/) | [twqps9fi](../wandb_final/wandb/run-20260915_143835-twqps9fi/) |
+|  |  | 10000 | 0.1 | [df5q1jzf](../wandb_final/wandb/run-20260915_024749-df5q1jzf/) | [4wgymhj6](../wandb_final/wandb/run-20260915_024845-4wgymhj6/) | [cxgbqlta](../wandb_final/wandb/run-20260915_150320-cxgbqlta/) |
+|  |  | 10000 | 1 | [kbuccnot](../wandb_final/wandb/run-20260915_024750-kbuccnot/) | [bi5cdn2h](../wandb_final/wandb/run-20260915_040751-bi5cdn2h/) | [ekw4iuca](../wandb_final/wandb/run-20260915_152236-ekw4iuca/) |
+|  | `taylor_green` | 5000 | 0 | [c4wbtisw](../wandb_final/wandb/run-20260911_234646-c4wbtisw/) | [cq0ud9qu](../wandb_final/wandb/run-20260912_214511-cq0ud9qu/) | [v8xp1nfb](../wandb_final/wandb/run-20260912_235356-v8xp1nfb/) |
+|  |  | 5000 | 0.001 | [ougpjjp6](../wandb_final/wandb/run-20260911_145314-ougpjjp6/) | [q0k8266t](../wandb_final/wandb/run-20260911_210108-q0k8266t/) | [10bkljil](../wandb_final/wandb/run-20260911_214633-10bkljil/) |
+|  |  | 5000 | 0.01 | [ltxj4xkw](../wandb_final/wandb/run-20260911_150526-ltxj4xkw/) | [0ihoxrs3](../wandb_final/wandb/run-20260911_211016-0ihoxrs3/) | [1judymnw](../wandb_final/wandb/run-20260911_230253-1judymnw/) |
+|  |  | 5000 | 0.1 | [9gr3e052](../wandb_final/wandb/run-20260911_152109-9gr3e052/) | [990rpp1j](../wandb_final/wandb/run-20260911_213021-990rpp1j/) | [3ac14lkv](../wandb_final/wandb/run-20260911_230421-3ac14lkv/) |
+|  |  | 5000 | 1 | [t6imxk42](../wandb_final/wandb/run-20260911_185255-t6imxk42/) | [m7py8977](../wandb_final/wandb/run-20260911_213823-m7py8977/) | [0x97sc6y](../wandb_final/wandb/run-20260911_232803-0x97sc6y/) |
+|  | `taylor_green_coeffs` | 5000 | 0 | [gm655o1s](../wandb_final/wandb/run-20260911_235301-gm655o1s/) | [djye9c5u](../wandb_final/wandb/run-20260912_215522-djye9c5u/) | [bqbv4b1j](../wandb_final/wandb/run-20260912_235701-bqbv4b1j/) |
+|  |  | 5000 | 0.001 | [6a6v3v13](../wandb_final/wandb/run-20260911_145543-6a6v3v13/) | [88qwt8wj](../wandb_final/wandb/run-20260911_210108-88qwt8wj/) | [kwo39eiq](../wandb_final/wandb/run-20260911_214633-kwo39eiq/) |
+|  |  | 5000 | 0.01 | [d8953w0c](../wandb_final/wandb/run-20260911_150807-d8953w0c/) | [ysg3g12f](../wandb_final/wandb/run-20260911_211016-ysg3g12f/) | [1lzm9126](../wandb_final/wandb/run-20260911_230253-1lzm9126/) |
+|  |  | 5000 | 0.1 | [7dwr41si](../wandb_final/wandb/run-20260911_152100-7dwr41si/) | [5ljkauji](../wandb_final/wandb/run-20260911_213022-5ljkauji/) | [4ehiitsv](../wandb_final/wandb/run-20260911_230554-4ehiitsv/) |
+|  |  | 5000 | 1 | [wg5zpvn1](../wandb_final/wandb/run-20260911_191755-wg5zpvn1/) | [c857ct0n](../wandb_final/wandb/run-20260911_213957-c857ct0n/) | [u6e675x6](../wandb_final/wandb/run-20260911_232803-u6e675x6/) |
+|  | `taylor_green_spacetime` | 5000 | 0 | [staf5qhm](../wandb_final/wandb/run-20260912_001027-staf5qhm/) | [qq1lpgbs](../wandb_final/wandb/run-20260912_220304-qq1lpgbs/) | [sihyu01k](../wandb_final/wandb/run-20260912_235703-sihyu01k/) |
+|  |  | 5000 | 0.001 | [dkg38fuh](../wandb_final/wandb/run-20260911_145543-dkg38fuh/) | [fvjsrgqj](../wandb_final/wandb/run-20260911_210308-fvjsrgqj/) | [8jiw3pw8](../wandb_final/wandb/run-20260911_214633-8jiw3pw8/) |
+|  |  | 5000 | 0.01 | [zs3c7igz](../wandb_final/wandb/run-20260911_150916-zs3c7igz/) | [tht0cgh6](../wandb_final/wandb/run-20260911_211016-tht0cgh6/) | [vbjcjz4s](../wandb_final/wandb/run-20260911_230253-vbjcjz4s/) |
+|  |  | 5000 | 0.1 | [i7q7f69y](../wandb_final/wandb/run-20260911_152146-i7q7f69y/) | [r34jboxe](../wandb_final/wandb/run-20260911_213151-r34jboxe/) | [alzppz3f](../wandb_final/wandb/run-20260911_232043-alzppz3f/) |
+|  |  | 5000 | 1 | [uuwsh5cc](../wandb_final/wandb/run-20260911_192039-uuwsh5cc/) | [8vm9tacs](../wandb_final/wandb/run-20260911_213957-8vm9tacs/) | [r4mtlj3y](../wandb_final/wandb/run-20260911_233307-r4mtlj3y/) |
+|  | `taylor_green_spacetime_coeffs` | 5000 | 0 | [904fxoye](../wandb_final/wandb/run-20260912_003303-904fxoye/) | [gvxvbpxi](../wandb_final/wandb/run-20260912_222258-gvxvbpxi/) | [f9zo85x6](../wandb_final/wandb/run-20260912_235703-f9zo85x6/) |
+|  |  | 5000 | 0.001 | [fg75wg1y](../wandb_final/wandb/run-20260911_145552-fg75wg1y/) | [j28pu92e](../wandb_final/wandb/run-20260911_210308-j28pu92e/) | [kv9drupk](../wandb_final/wandb/run-20260911_223613-kv9drupk/) |
+|  |  | 5000 | 0.01 | [xnmltmr1](../wandb_final/wandb/run-20260911_151038-xnmltmr1/) | [aoq4q5dy](../wandb_final/wandb/run-20260911_211016-aoq4q5dy/) | [fd0j2vls](../wandb_final/wandb/run-20260911_230257-fd0j2vls/) |
+|  |  | 5000 | 0.1 | [8hyuhx1e](../wandb_final/wandb/run-20260911_152341-8hyuhx1e/) | [3bavbenw](../wandb_final/wandb/run-20260911_213151-3bavbenw/) | [oz9giiwk](../wandb_final/wandb/run-20260911_232043-oz9giiwk/) |
+|  |  | 5000 | 1 | [9muxpbjb](../wandb_final/wandb/run-20260911_193121-9muxpbjb/) | [9om4nz8f](../wandb_final/wandb/run-20260911_213957-9om4nz8f/) | [bmasdgge](../wandb_final/wandb/run-20260911_233709-bmasdgge/) |
+|  | `merge_vortices_easier` | 500 | 0 | [spxlfy91](../wandb_final/wandb/run-20260912_120933-spxlfy91/) | [d5mrykhs](../wandb_final/wandb/run-20260912_195220-d5mrykhs/) | [qv9udj8i](../wandb_final/wandb/run-20260913_001305-qv9udj8i/) |
+|  |  | 500 | 0.001 | [t8ps8yk8](../wandb_final/wandb/run-20260911_145614-t8ps8yk8/) | [1hun1hvn](../wandb_final/wandb/run-20260911_210308-1hun1hvn/) | [xa9wuku9](../wandb_final/wandb/run-20260911_223746-xa9wuku9/) |
+|  |  | 500 | 0.01 | [cxpqw5p3](../wandb_final/wandb/run-20260911_151639-cxpqw5p3/) | [d2yg2531](../wandb_final/wandb/run-20260911_211014-d2yg2531/) | [khlpo0mm](../wandb_final/wandb/run-20260911_230257-khlpo0mm/) |
+|  |  | 500 | 0.1 | [mvky47nl](../wandb_final/wandb/run-20260911_152510-mvky47nl/) | [d45hn6he](../wandb_final/wandb/run-20260911_213321-d45hn6he/) | [vrhgswty](../wandb_final/wandb/run-20260911_232043-vrhgswty/) |
+|  |  | 500 | 1 | [6p24tu6w](../wandb_final/wandb/run-20260911_193326-6p24tu6w/) | [239bqm0q](../wandb_final/wandb/run-20260911_213955-239bqm0q/) | [2e6jvbot](../wandb_final/wandb/run-20260911_234315-2e6jvbot/) |
+|  | `species_transport` | 10000 | 0 | [3lve36ss](../wandb_final/wandb/run-20260915_152237-3lve36ss/) | [1odurtu1](../wandb_final/wandb/run-20260915_152530-1odurtu1/) | [bsw06ns4](../wandb_final/wandb/run-20260915_152628-bsw06ns4/) |
+|  |  | 10000 | 0.001 | [wbkq3f72](../wandb_final/wandb/run-20260911_145746-wbkq3f72/) | [idtu5hrg](../wandb_final/wandb/run-20260911_210431-idtu5hrg/) | [wfmshh1u](../wandb_final/wandb/run-20260911_224454-wfmshh1u/) |
+|  |  | 10000 | 0.01 | [a2hjiy0y](../wandb_final/wandb/run-20260911_151821-a2hjiy0y/) | [6o2722r4](../wandb_final/wandb/run-20260911_212539-6o2722r4/) | [hef3epj4](../wandb_final/wandb/run-20260911_230257-hef3epj4/) |
+|  |  | 10000 | 0.1 | [glp7wjjt](../wandb_final/wandb/run-20260911_153322-glp7wjjt/) | [nyq1fl1j](../wandb_final/wandb/run-20260911_213321-nyq1fl1j/) | [ybnvm7gt](../wandb_final/wandb/run-20260911_232521-ybnvm7gt/) |
+|  |  | 10000 | 1 | [274fgfz6](../wandb_final/wandb/run-20260911_193908-274fgfz6/) | [glu0sz46](../wandb_final/wandb/run-20260911_214309-glu0sz46/) | [ba67nb31](../wandb_final/wandb/run-20260911_234312-ba67nb31/) |
+|  | `forced_turb` | 10000 | 0.001 | [msc3p1s2](../wandb_final/wandb/run-20260916_024646-msc3p1s2/) | — | — |
+|  |  | 10000 | 0.01 | [340bvcen](../wandb_final/wandb/run-20260916_034341-340bvcen/) | — | — |
+|  |  | 10000 | 0.1 | [9jbh154b](../wandb_final/wandb/run-20260916_034607-9jbh154b/) | — | — |
+|  |  | 10000 | 1 | [3kydzigh](../wandb_final/wandb/run-20260916_040527-3kydzigh/) | — | — |
+|  |  | 5000 | 0 | [zld33s10](../wandb_final/wandb/run-20260916_024923-zld33s10/) | — | — |
+|  |  | 1000 | 0 | [qnvzzzlw](../wandb_final/wandb/run-20260915_010920-qnvzzzlw/) | [p5q5t0zr](../wandb_final/wandb/run-20260915_022551-p5q5t0zr/) | [bnwf87gw](../wandb_final/wandb/run-20260915_022854-bnwf87gw/) |
+|  |  | 500 | 0 | [gxofae1v](../wandb_final/wandb/run-20260914_180734-gxofae1v/) | [22l32gcl](../wandb_final/wandb/run-20260915_005624-22l32gcl/) | [t0gb5vnu](../wandb_final/wandb/run-20260915_022350-t0gb5vnu/) |
+|  |  | 100 | 0 | [tln2277b](../wandb_final/wandb/run-20260914_174012-tln2277b/) | [xzp0bu81](../wandb_final/wandb/run-20260914_185738-xzp0bu81/) | [46r8qdzq](../wandb_final/wandb/run-20260915_020851-46r8qdzq/) |

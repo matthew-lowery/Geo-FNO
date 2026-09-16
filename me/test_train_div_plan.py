@@ -85,6 +85,40 @@ class TrainingPlanTest(unittest.TestCase):
         jobs = self.plan("--remaining", "--dataset", "forced_turb", "--phase", "forced")
         self.assertEqual(len(jobs), 30)
 
+    def test_geo_ood_omissions_with_all_files_available(self):
+        jobs = self.plan("--geo-ood-missing")
+        expected = set(self.problems) - {"forced_turb", "species_transport", "buoyancy_cavity_flow"}
+        self.assertEqual(collections.Counter(j[5]["dataset"] for j in jobs),
+                         {problem: 3 for problem in expected})
+        for phase, model, label, _, command, options in jobs:
+            self.assertEqual((phase, model), ("baseline", "geo"))
+            self.assertTrue(label.startswith("oodfix_"))
+            self.assertEqual(options["div-loss-weight"], "0")
+            self.assertIn("--require-ood", command)
+            self.assertIn("--save", command)
+            self.assertNotIn("--no-ood", command)
+            self.assertNotIn("--div-loss", command)
+            self.assertIn("geo-ood-recovery-20260916", options["model-folder"])
+
+    def test_geo_ood_omissions_without_coefficient_ood_file(self):
+        path = self.root / "taylor_green/data_coeffs_ood.mat"
+        path.rename(path.with_suffix(".unavailable"))
+        jobs = self.plan("--geo-ood-missing")
+        self.assertEqual(len(jobs), 21)
+        self.assertEqual({j[5]["dataset"] for j in jobs}, {
+            "backward_facing_step", "flow_cylinder_laminar", "flow_cylinder_shedding",
+            "lid_cavity_flow", "taylor_green", "taylor_green_spacetime", "merge_vortices_easier",
+        })
+
+    def test_geo_ood_omissions_single_job_filter(self):
+        jobs = self.plan("--geo-ood-missing", "--dataset", "flow_cylinder_laminar", "--seed", "1")
+        self.assertEqual(len(jobs), 1)
+
+    def test_geo_ood_omissions_reject_other_phases_or_models(self):
+        for option in [("--model", "trans"), ("--phase", "div"), ("--remaining",)]:
+            with self.subTest(option=option), self.assertRaises(subprocess.CalledProcessError):
+                self.plan("--geo-ood-missing", *option)
+
     def test_missing_ood_skips_only_baselines(self):
         path = self.root / "buoyancy_cavity_flow/data_ood.mat"
         path.rename(path.with_suffix(".unavailable"))
