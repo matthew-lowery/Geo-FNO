@@ -135,8 +135,8 @@ parser.add_argument('--div-order', type=int, default=2,
                     help='RBF-FD polynomial order for divergence')
 parser.add_argument('--div-loss', action='store_true')
 parser.add_argument('--div-loss-weight', type=float, default=1.0)
-parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
-parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
+parser.add_argument('--div-folder', type=str, default='/projects/bgcs/mlowery/geo-fno_divs')
+parser.add_argument('--model-folder', type=str, default='/projects/bgcs/mlowery/geo-fno_models')
 parser.add_argument('--dataset', type=str, default='backward_facing_step', choices=['backward_facing_step',
                                                                                     'buoyancy_cavity_flow', 
                                                                                     'flow_cylinder_laminar', 
@@ -348,7 +348,9 @@ if ood_dataset is not None:
         torch.utils.data.TensorDataset(ood_x, ood_x_grid, ood_y, ood_y_grid),
         batch_size=batch_size, shuffle=False
     )
+    pooled_ood = args.dataset in {'taylor_green', 'taylor_green_exact'}
     ood_loss = 0.0
+    error_sq = target_sq = 0.0
     with torch.no_grad():
         for x, x_grid_batch, y, y_grid_batch in ood_loader:
             x, x_grid_batch = x.cuda(), x_grid_batch.cuda()
@@ -356,9 +358,19 @@ if ood_dataset is not None:
             inp = torch.concat((x, x_grid_batch), axis=-1)
             out = model(inp, code=None, x_in=x_grid_batch, x_out=y_grid_batch, iphi=model_iphi)
             out = y_normalizer.decode(out)
-            ood_loss += myloss(out.double().reshape(len(x), -1), y.double().reshape(len(x), -1)).item()
-    ood_loss /= len(ood_x)
-    artifacts.log({'ood_loss': ood_loss, f'ood/{args.dataset}': ood_loss})
+            if pooled_ood:
+                error_sq += (out.double() - y.double()).square().sum().item()
+                target_sq += y.double().square().sum().item()
+            else:
+                ood_loss += myloss(out.double().reshape(len(x), -1), y.double().reshape(len(x), -1)).item()
+    if pooled_ood:
+        if target_sq == 0:
+            raise ValueError('Taylor-Green OOD targets have zero pooled norm')
+        ood_loss = (error_sq / target_sq) ** 0.5
+    else:
+        ood_loss /= len(ood_x)
+    artifacts.log({'ood_loss': ood_loss, f'ood/{args.dataset}': ood_loss,
+                   'ood_metric': 'pooled_relative_l2' if pooled_ood else 'mean_relative_l2'})
 
 ### saving model for later use
 if args.save and args.calc_div:

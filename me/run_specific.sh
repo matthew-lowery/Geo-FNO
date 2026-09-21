@@ -31,9 +31,9 @@ EOF
 #problems=("flow_cylinder_shedding" "flow_cylinder_laminar" "taylor_green_exact" "backward_facing_step" "backward_facing_step_ood" "merge_vortices_easier" "buoyancy_cavity_flow" "lid_cavity_flow")
 #Ns=(10000  100  5000  500  500  500  10000  10000)
 
-dir='/projects/bfel/mlowery/geo-fno-new'
-divdir='/projects/bfel/mlowery/geo-fno-new_div'
-modeldir='/projects/bfel/mlowery/geo-fno-new_models'
+dir='/projects/bgcs/mlowery/geo-fno-new'
+divdir='/projects/bgcs/mlowery/geo-fno-new_div'
+modeldir='/projects/bgcs/mlowery/geo-fno-new_models'
 projname='ramansh_specific'
 ### currently need to rerun airfoil, taylor green time, make sure bfs_ood is good 
 #

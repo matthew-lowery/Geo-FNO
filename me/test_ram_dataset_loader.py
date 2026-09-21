@@ -92,6 +92,27 @@ class DatasetSelectionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             loader.load_dataset("taylor_green", 5, 3, self.root, test_count=2)
 
+    def test_species_keeps_boundary_inputs_on_their_own_grid(self):
+        directory = self.root / "species_transport"
+        directory.mkdir()
+        points = np.arange(18, dtype=float).reshape(6, 3)
+        boundary = np.array([[0., 0., 0.], [1., 0., 0.]])
+        inputs = np.arange(12, dtype=float).reshape(6, 2)
+        outputs = np.arange(108, dtype=float).reshape(6, 6, 3)
+        data = {"points": points, "bc_points": boundary,
+                "init_velocity": inputs, "velocity": outputs}
+        savemat(directory / "data.mat", data)
+        savemat(directory / "data_ood.mat", data)
+        savemat(directory / "species_transport_fekete.mat", {"E": [1, 3, 5, 2, 4, 6]})
+        with patch.dict(loader.TRAIN_SAMPLE_COUNTS, {"species_transport": 4}):
+            training = loader.load_dataset("species_transport", 2, 4, self.root, test_count=2)
+            ood = loader.load_ood_dataset("species_transport", 4, self.root, test_count=2)
+        self.assertEqual(training.train_input.shape, (2, 2, 1))
+        self.assertEqual(training.train_output.shape, (2, 4, 3))
+        np.testing.assert_array_equal(training.input_points, boundary)
+        np.testing.assert_array_equal(ood[0], boundary)
+        np.testing.assert_array_equal(ood[1], training.output_points)
+
 
 if __name__ == "__main__":
     unittest.main()

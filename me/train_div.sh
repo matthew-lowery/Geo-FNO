@@ -6,7 +6,7 @@ DATA_ROOT="${RAM_DATA_ROOT:-$ME_DIR/../../ram_dataset}"
 if [[ -z "${RAM_DATA_ROOT:-}" && -d /projects/bgcs/mlowery/ram_dataset ]]; then
     DATA_ROOT=/projects/bgcs/mlowery/ram_dataset
 fi
-RESULTS_ROOT="${RAM_RESULTS_ROOT:-/projects/bfel/mlowery/operator-benchmarks}"
+RESULTS_ROOT="${RAM_RESULTS_ROOT:-/projects/bgcs/mlowery/operator-benchmarks}"
 PYTHON="${TRAIN_PYTHON:-/u/mlowery/.conda/envs/gnot/bin/python}"
 mode=dry-run
 phase_filter=all
@@ -43,7 +43,7 @@ done
 case "$phase_filter" in all|div|baseline|forced) ;; *) usage >&2; exit 2 ;; esac
 case "$model_filter" in all|geo|trans) ;; *) usage >&2; exit 2 ;; esac
 if [[ "$remaining" == true ]]; then
-    RESULTS_ROOT="${RAM_RESULTS_ROOT:-/projects/bfel/mlowery/operator-benchmarks/rerun-20260914}"
+    RESULTS_ROOT="${RAM_RESULTS_ROOT:-/projects/bgcs/mlowery/operator-benchmarks/rerun-20260914}"
 fi
 if [[ "$geo_ood_missing" == true ]]; then
     [[ "$remaining" == false ]] || { echo "Choose one rerun selection" >&2; exit 2; }
@@ -51,7 +51,7 @@ if [[ "$geo_ood_missing" == true ]]; then
     [[ "$phase_filter" == all || "$phase_filter" == baseline ]] || { echo "No-div baselines only" >&2; exit 2; }
     model_filter=geo
     phase_filter=baseline
-    RESULTS_ROOT="${RAM_RESULTS_ROOT:-/projects/bfel/mlowery/operator-benchmarks/geo-ood-recovery-20260916}"
+    RESULTS_ROOT="${RAM_RESULTS_ROOT:-/projects/bgcs/mlowery/operator-benchmarks/geo-ood-recovery-20260916}"
 fi
 
 # dataset, Geo entry, training count, points, Geo hours/batch/resolution/width/modes/order,
@@ -106,6 +106,7 @@ data_files_exist() {
 
 launch() {
     local phase="$1" model="$2" seed="$3" coef="$4" size="$5"
+    [[ "$dataset" != species_transport || "$phase" != div ]] || return 0
     [[ "$model_filter" == all || "$model_filter" == "$model" ]] || return 0
     [[ "$dataset_filter" == all || "$dataset_filter" == "$dataset" ]] || return 0
     [[ "$seed_filter" == all || "$seed_filter" == "$seed" ]] || return 0

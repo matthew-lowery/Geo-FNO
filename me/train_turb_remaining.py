@@ -15,7 +15,7 @@ import sys
 
 
 HERE = Path(__file__).resolve().parent
-BASE = Path('/projects/bfel/mlowery/operator-benchmarks')
+BASE = Path('/projects/bgcs/mlowery/operator-benchmarks')
 IGNORED = {'data_root', 'model_folder', 'div_folder', 'project_name', 'gpu',
            'wandb', 'save', 'calc_div', 'require_ood', 'no_ood', 'resume',
            'eval_only', 'checkpoint_every'}

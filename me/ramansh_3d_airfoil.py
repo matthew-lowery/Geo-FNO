@@ -150,9 +150,9 @@ parser.add_argument('--div-order', type=int, default=2,
                     help='RBF-FD polynomial order for divergence')
 parser.add_argument('--div-loss', action='store_true')
 parser.add_argument('--div-loss-weight', type=float, default=1.0)
-parser.add_argument('--dir', type=str, default='/projects/bfel/mlowery/geo-fno')
-parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
-parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
+parser.add_argument('--dir', type=str, default='/projects/bgcs/mlowery/geo-fno')
+parser.add_argument('--div-folder', type=str, default='/projects/bgcs/mlowery/geo-fno_divs')
+parser.add_argument('--model-folder', type=str, default='/projects/bgcs/mlowery/geo-fno_models')
 parser.add_argument('--dataset', type=str, default='airfoil')
 
 

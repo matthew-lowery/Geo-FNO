@@ -40,15 +40,16 @@ class TrainingPlanTest(unittest.TestCase):
 
     def test_complete_sweeps_and_unique_jobs(self):
         jobs = self.plan()
-        self.assertEqual(len(jobs), 390)
+        self.assertEqual(len(jobs), 366)
         self.assertEqual(collections.Counter(job[0] for job in jobs),
-                         {"div": 288, "baseline": 72, "forced": 30})
+                         {"div": 264, "baseline": 72, "forced": 30})
         self.assertEqual(len({(job[0], job[2]) for job in jobs}), len(jobs))
         for phase, model, _, _, command, options in jobs:
             self.assertTrue(options["data-root"].endswith("ram_dataset"))
             self.assertIn(options["seed"], {"1", "2", "3"})
             self.assertIn("--calc-div", command)
             if phase == "div":
+                self.assertNotEqual(options["dataset"], "species_transport")
                 self.assertIn(options["div-loss-weight"], {"0.001", "0.01", "0.1", "1"})
                 self.assertIn("--div-loss", command)
             else:

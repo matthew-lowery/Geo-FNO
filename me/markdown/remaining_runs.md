@@ -32,7 +32,7 @@ bash train_remaining.sh --submit --dataset forced_turb --phase forced --model tr
 
 Do not submit the same pilot again with the full sweep unless intentionally repeating it. This launcher does not deduplicate against the live Slurm queue.
 
-The default new result root is `/projects/bfel/mlowery/operator-benchmarks/rerun-20260914`, separate from the previous batch. Override with `RAM_RESULTS_ROOT`. `RAM_DATA_ROOT` selects the MATLAB dataset root; `TRAIN_PYTHON` selects the interpreter. Job names start with `rerun_`; output/error files go to `me/out` and `me/err`. Jobs request one A100, 32 GB host memory, partition `gpuA100x4`, account `bgcs-delta-gpu`.
+The default new result root is `/projects/bgcs/mlowery/operator-benchmarks/rerun-20260914`, separate from the previous batch. Override with `RAM_RESULTS_ROOT`. `RAM_DATA_ROOT` selects the MATLAB dataset root; `TRAIN_PYTHON` selects the interpreter. Job names start with `rerun_`; output/error files go to `me/out` and `me/err`. Jobs request one A100, 32 GB host memory, partition `gpuA100x4`, account `bgcs-delta-gpu`.
 
 `ram_dataset/buoyancy_cavity_flow/data_ood.mat` remains absent locally, so neither model's buoyancy baseline is scheduled. No replacement OOD dataset is inferred. Transolver buoyancy div jobs still run using the available training file. `--check` validates only retained jobs; an entirely skipped selection submits nothing and exits successfully. A malformed existing file or a file disappearing after selection remains an error.
 

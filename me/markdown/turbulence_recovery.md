@@ -40,7 +40,7 @@ resume their periodic checkpoints when present. Checkpoints retain optimizer,
 scheduler, normalization, IPHI, and RNG state. A final-epoch checkpoint proceeds
 directly to evaluation. Without a checkpoint, an unfinished case starts afresh.
 
-New output root: `/projects/bfel/mlowery/operator-benchmarks/turb-recovery-20260916`.
+New output root: `/projects/bgcs/mlowery/operator-benchmarks/turb-recovery-20260916`.
 Overrides: `RAM_RESULTS_ROOT` or `--results-root`, `RAM_DATA_ROOT`, `TRAIN_PYTHON`;
 additional old result/cache locations: `--previous-results-root` / `--wandb-root`.
 Only datasets present in `ram_dataset` are selected. `--model`, `--phase`,

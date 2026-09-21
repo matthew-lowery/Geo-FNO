@@ -6,12 +6,24 @@ import numpy as np
 from scipy.io import savemat
 
 from dataset_boundaries import divergence_interior_mask
-from divergence_metrics import summarize_divergence
+from divergence_metrics import build_rbf_fd_gradient, summarize_divergence
 from ram_dataset_loader import _point_filter
 import torch
 
 
 class BoundaryMaskTest(unittest.TestCase):
+    def test_anisotropic_3d_gradient_reproduces_linear_fields(self):
+        random = np.random.default_rng(3)
+        horizontal = random.uniform(0, .02, (40, 20, 2)).reshape(-1, 2)
+        height = np.repeat(np.linspace(0, .26, 40), 20)
+        points = np.column_stack((horizontal, height))
+        values = torch.tensor(points, dtype=torch.float32)
+        operators = build_rbf_fd_gradient(points, order=3, normalize_axes=True)
+        for axis, operator in enumerate(operators):
+            derivatives = torch.sparse.mm(operator, values)
+            expected = torch.eye(3)[axis].expand_as(derivatives)
+            torch.testing.assert_close(derivatives, expected, rtol=0, atol=1e-3)
+
     def test_fixed_geometry_not_sample_extrema(self):
         points = np.array([[.2, .2], [.8, .8], [0., .5], [1., .5]])
         mask = divergence_interior_mask(points, "lid_cavity_flow", ".")

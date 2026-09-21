@@ -6,35 +6,42 @@ from scipy.linalg import lstsq
 from scipy.spatial import cKDTree
 
 
-def build_rbf_fd_gradient(points, order=2):
+def build_rbf_fd_gradient(points, order=2, normalize_axes=False):
+    """Build physical derivatives with optional unit-box stencil geometry."""
     points = np.asarray(points, dtype=np.float64)
     dimension = points.shape[1]
     powers = np.asarray([p for p in product(range(order + 1), repeat=dimension) if sum(p) <= order])
     polynomial_count = len(powers)
     stencil_size = 2 * polynomial_count + 1
+    if stencil_size > len(points):
+        raise ValueError(f"RBF-FD stencil needs {stencil_size} points, got {len(points)}")
     rbf_power = min(max(order - (order % 2 == 0), 5), 11)
-    tree = cKDTree(points)
+    axis_scale = np.ptp(points, axis=0) if normalize_axes else np.ones(dimension)
+    if np.any(axis_scale <= 0):
+        raise ValueError("RBF-FD points must vary in every spatial direction")
+    search_points = (points - points.min(axis=0)) / axis_scale if normalize_axes else points
+    tree = cKDTree(search_points)
     rows = np.repeat(np.arange(len(points)), stencil_size)
     columns = np.empty_like(rows)
     weights = np.empty((dimension, len(rows)), dtype=np.float64)
     eps = np.finfo(np.float64).eps
-    for center_index, center in enumerate(points):
+    for center_index, center in enumerate(search_points):
         distances, stencil = tree.query(center, k=stencil_size)
         scale = distances[-1]
         if not np.isfinite(scale) or scale <= eps:
             raise ValueError("RBF-FD stencil contains coincident points")
-        local = (points[stencil] - center) / scale
+        local = (search_points[stencil] - center) / scale
         pairwise = np.linalg.norm(local[:, None] - local[None, :], axis=-1)
         polynomial = np.prod(local[:, None] ** powers[None, :], axis=-1)
         system = np.block([[pairwise ** rbf_power, polynomial],
                            [polynomial.T, np.zeros((polynomial_count, polynomial_count))]])
         derivative = np.zeros((stencil_size + polynomial_count, dimension))
-        derivative[:stencil_size] = -local * rbf_power * (pairwise[0, :, None] + eps) ** (rbf_power - 2) / scale
+        derivative[:stencil_size] = -local * rbf_power * (pairwise[0, :, None] + eps) ** (rbf_power - 2) / (scale * axis_scale)
         for axis in range(dimension):
             unit = np.zeros(dimension, dtype=int)
             unit[axis] = 1
             polynomial_index = np.flatnonzero(np.all(powers == unit, axis=1))[0]
-            derivative[stencil_size + polynomial_index, axis] = 1 / scale
+            derivative[stencil_size + polynomial_index, axis] = 1 / (scale * axis_scale[axis])
         solution = lstsq(system, derivative, lapack_driver="gelsy", check_finite=False)[0]
         block = slice(center_index * stencil_size, (center_index + 1) * stencil_size)
         columns[block] = stencil

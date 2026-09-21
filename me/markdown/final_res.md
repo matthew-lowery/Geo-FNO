@@ -1,8 +1,8 @@
 # Final results
 
-Updated from `../wandb_final/wandb`: runs started 11–16 September 2026. The cache contains the original 330 runs at commit `eecb239` and 43 additional runs at `52a150b`. For each model/dataset/training-size/divergence-weight/seed configuration, the latest attempt replaces the earlier attempt; repeated seeds are not counted twice. Older August runs and values from `new_res.md` are excluded.
+Updated from `../wandb_final/wandb`: runs started 11–20 September 2026. The cache contains the original 330 runs, the September 14–18 reruns, and later recovery attempts. For each model/dataset/training-size/divergence-weight/seed configuration, the latest finite result is retained; repeated seeds are not counted twice. Older August runs and values from `new_res.md` are excluded.
 
-Rows follow the current `train_div.sh`: no-div baseline and divergence-penalty weight $\lambda \in \{0.001, 0.01, 0.1, 1\}$. Each configuration targets seeds 1, 2, 3 and 500 epochs. The columns `ntrain` and `npoints` give the requested training-sample count and spatial point budget; spacetime layouts can expand this budget. `Div. order` is the logged RBF-FD polynomial degree, not an empirically measured convergence order. The new Geo-FNO order-2 runs are retained here because they belong to this batch; historical order-2 runs are excluded.
+Rows follow the current `train_div.sh`: no-div baseline and divergence-penalty weight $\lambda \in \{0.001, 0.01, 0.1, 1\}$. Each configuration targets seeds 1, 2, 3 and 500 epochs. The columns `ntrain` and `npoints` give the requested training-sample count and spatial point budget; spacetime layouts can expand this budget. The new Geo-FNO order-2 runs are retained here because they belong to this batch; historical order-2 runs are excluded.
 
 Metric entries are mean ± population standard deviation across seeds with finite final `test_loss`; NaN seeds are excluded and explicitly listed. A single finite seed has no standard deviation. For scalar seed values $z_1,\ldots,z_K$, where $K$ is the number of contributing seeds, the reported mean $\bar z$ and standard deviation $\sigma$ are given by Eq. (1):
 
@@ -25,153 +25,167 @@ $$
 \frac{1}{M}\sum_{i=1}^{M}\frac{\|\widehat U_i-U_i\|_2}{\|U_i\|_2}. \tag{3}
 $$
 
+Some Taylor–Green OOD targets have zero norm, so Eq. (3) is infinite even for finite predictions. Future Geo-FNO Taylor–Green and spacetime runs use the pooled component-relative loss in Eq. (4), with the same $M$, $\widehat U_i$, and $U_i$ as Eq. (3):
+
+$$
+\sqrt{\frac{\sum_{i=1}^{M}\|\widehat U_i-U_i\|_2^2}{\sum_{i=1}^{M}\|U_i\|_2^2}}. \tag{4}
+$$
+
+Future Transolver Taylor–Green and spacetime OOD runs analogously pool the magnitude vectors $\widehat a_i$ and $a_i$ defined above:
+
+$$
+\sqrt{\frac{\sum_{i=1}^{M}\|\widehat a_i-a_i\|_2^2}{\sum_{i=1}^{M}\|a_i\|_2^2}}. \tag{5}
+$$
+
+All OOD samples contribute, including those with zero target norm. The denominators are nonzero for both selected OOD sets. Historical `∞` entries below use the per-sample metrics, Eq. (2) or Eq. (3), and will change only after new evaluations; they must not be compared directly with Eq. (4) or Eq. (5).
+
 The `52a150b` reruns use float64 evaluation reductions and bounded Transolver slice temperature; retained original runs predate these fixes. Seed averages use Eq. (1) within each listed row.
 
 Interior divergence is the maximum / median absolute discrete divergence over test samples and interior points (including time slices for spacetime datasets), followed by the seed aggregation above. Different orders produce different discrete diagnostics.
 
-`NaN` means a logged numerical failure; `No summary` means an attempted run has metadata but no cached summary, not necessarily a NaN failure. Blank metric cells indicate no result; `—` indicates an absent metric in a populated result. `Disabled` means OOD evaluation was disabled for div training; `No OOD data` means the run logged `ood_available=false`. `Partial` marks a rerun with training progress but no final test summary; the epoch count is observed progress, not confirmation that the remote job is still running. `Missing` means no cached attempt for that seed. Unqualified seeds have finite test loss.
+`NaN` means a logged numerical failure; `No summary` means an attempted run has metadata but no cached summary, not necessarily a NaN failure. Blank metric cells indicate no result; `—` indicates an absent metric in a populated result. `Disabled` means OOD evaluation was disabled for div training; `No OOD data` means the run logged `ood_available=false`; `Unlogged` means OOD data was found but the old logging path did not retain the loss. `Partial` marks a rerun with training progress but no final test summary; the epoch count is observed progress, not confirmation that the remote job is still running. `Missing` means no cached attempt for that seed. Unqualified seeds have finite test loss.
 
 ## Benchmark results
 
-| Framework | Dataset | Run | $\lambda$ | Div. order | ntrain | npoints | Seeds / status | Time (s) | Test loss | Interior test div (max / median) | OOD loss |
-|---|---|---|---:|---:|---:|---:|---|---:|---:|---:|---:|
-| **Geo-FNO** | **2D Backward-Facing Step** | no-div | 0 | 3 | 500 | 1000 | 1, 2, 3 | 225.7 ± 2.11 | 9.949e-5 ± 1.728e-5 | 1.981 ± 0.002382 / 4.769e-4 ± 1.255e-5 | 1.013 ± 0.194 |
-|  |  | div | 0.001 | 3 |  |  | 1, 2, 3 | 216.2 ± 2.108 | 9.259e-5 ± 9.780e-6 | 1.983 ± 0.002885 / 4.536e-4 ± 7.371e-6 | Disabled |
-|  |  | div | 0.01 | 3 |  |  | 1, 2, 3 | 219.4 ± 1.173 | 1.035e-4 ± 1.914e-5 | 1.98 ± 0.00212 / 4.848e-4 ± 8.368e-6 | Disabled |
-|  |  | div | 0.1 | 3 |  |  | 1, 2, 3 | 217.8 ± 1.275 | 1.043e-4 ± 9.781e-6 | 1.972 ± 0.00179 / 4.732e-4 ± 8.895e-6 | Disabled |
-|  |  | div | 1 | 3 |  |  | 1, 2, 3 | 217.3 ± 1.038 | 0.002127 ± 2.004e-5 | 1.286 ± 0.05033 / 6.612e-4 ± 5.633e-5 | Disabled |
-|  | **2D Flow Past a Cylinder (no vortex shedding)** | no-div | 0 | 3 | 100 | 1000 | 1, 2, 3 | 262.2 ± 1.65 | 1.618e-4 ± 4.766e-5 | 0.7716 ± 1.441e-4 / 1.117e-4 ± 2.307e-5 | 0.6449 ± 0.306 |
-|  |  | div | 0.001 | 3 |  |  | 1, 2, 3 | 180.9 ± 1.096 | 1.850e-4 ± 4.173e-5 | 0.7716 ± 3.154e-4 / 1.147e-4 ± 2.920e-5 | Disabled |
-|  |  | div | 0.01 | 3 |  |  | 1, 2, 3 | 179.9 ± 0.05814 | 1.555e-4 ± 3.234e-5 | 0.7716 ± 3.908e-4 / 1.056e-4 ± 1.103e-5 | Disabled |
-|  |  | div | 0.1 | 3 |  |  | 1, 2, 3 | 180.4 ± 0.5481 | 1.803e-4 ± 2.747e-5 | 0.7704 ± 7.570e-4 / 1.091e-4 ± 1.488e-6 | Disabled |
-|  |  | div | 1 | 3 |  |  | 1, 2, 3 | 180 ± 0.3947 | 1.838e-4 ± 2.357e-5 | 0.7601 ± 0.00248 / 1.094e-4 ± 1.013e-5 | Disabled |
-|  | **2D Flow Past a Cylinder (vortex shedding)** | no-div | 0 | 3 | 10000 | 1000 | 1, 2, 3 | 11410 ± 13.81 | 4.783e-5 ± 1.187e-5 | 4.943 ± 5.985e-4 / 0.001447 ± 1.423e-5 | Missing |
-|  |  | div | 0.001 | 3 |  |  | 1, 2, 3 | 11870 ± 8.008 | 3.737e-5 ± 4.751e-6 | 4.942 ± 3.975e-4 / 0.001432 ± 7.726e-6 | Disabled |
-|  |  | div | 0.01 | 3 |  |  | 1, 2, 3 | 11870 ± 18.3 | 4.784e-5 ± 1.093e-5 | 4.93 ± 0.006215 / 0.001433 ± 1.145e-5 | Disabled |
-|  |  | div | 0.1 | 3 |  |  | 1, 2, 3 | 11880 ± 11.91 | 2.032e-4 ± 2.179e-5 | 4.278 ± 0.01617 / 0.001455 ± 2.563e-5 | Disabled |
-|  |  | div | 1 | 3 |  |  | 1, 2, 3 | 11880 ± 25.7 | 0.012 ± 0.003156 | 1.138 ± 0.2216 / 0.001491 ± 2.000e-4 | Disabled |
-|  | **2D Lid-Driven Cavity Flow** | no-div | 0 | 3 | 10000 | 1000 | 1, 2, 3 | 6636 ± 48.2 | 1.509e-4 ± 2.041e-5 | 18.14 ± 9.691e-4 / 0.5722 ± 3.843e-4 | 0.5899 ± 0.0982 |
-|  |  | div | 0.001 | 3 |  |  | 1, 2, 3 | 6724 ± 19.75 | 1.795e-4 ± 2.001e-5 | 18.09 ± 0.01043 / 0.57 ± 1.670e-4 | Disabled |
-|  |  | div | 0.01 | 3 |  |  | 1, 2, 3 | 6734 ± 12.01 | 0.002027 ± 1.645e-5 | 9.507 ± 0.003913 / 0.3617 ± 5.243e-4 | Disabled |
-|  |  | div | 0.1 | 3 |  |  | 1, 2, 3 | 6756 ± 27.36 | 0.01109 ± 3.133e-4 | 2.314 ± 0.02049 / 0.04074 ± 6.557e-5 | Disabled |
-|  |  | div | 1 | 3 |  |  | 1, 2, 3 | 6742 ± 1.876 | 0.01565 ± 1.076e-4 | 0.4184 ± 0.02775 / 0.008379 ± 2.090e-4 | Disabled |
-|  | **2D Buoyancy-Driven Cavity Flow** | no-div | 0 | 3 | 10000 | 5000 | 1, 2, 3 | 21160 ± 7.866 | 1.421e-4 ± 6.241e-6 | 3.546 ± 0.002381 / 0.0198 ± 7.664e-5 | No OOD dataset |
-|  |  | div | 0.001 | 3 |  |  | 1, 2, 3 | 21600 ± 19.28 | 1.571e-4 ± 1.324e-6 | 3.513 ± 0.007005 / 0.01985 ± 3.330e-5 | Disabled |
-|  |  | div | 0.01 | 3 |  |  | 1, 2, 3 | 21630 ± 9.716 | 1.644e-4 ± 7.940e-6 | 3.454 ± 0.007804 / 0.01949 ± 7.262e-5 | Disabled |
-|  |  | div | 0.1 | 3 |  |  | 1, 2, 3 | 21610 ± 33.21 | 0.001926 ± 2.630e-6 | 2.095 ± 0.003948 / 0.009561 ± 2.793e-4 | Disabled |
-|  |  | div | 1 | 3 |  |  | 1, 2, 3 | 21610 ± 22.73 | 0.005727 ± 3.916e-5 | 0.5015 ± 0.009256 / 0.004568 ± 6.371e-4 | Disabled |
-|  | **2D Taylor–Green Vortices** | no-div | 0 | 2 | 5000 | 500 | 1, 2, 3 | 2606 ± 37.2 | 4.181e-4 ± 2.939e-5 | 2.563 ± 0.9359 / 0.0937 ± 0.004725 | Missing |
-|  |  | div | 0.001 | 2 |  |  | 1, 2, 3 | 2646 ± 4.866 | 5.070e-4 ± 1.607e-4 | 5.037 ± 5.223 / 0.06777 ± 0.004779 | Disabled |
-|  |  | div | 0.01 | 2 |  |  | 1, 2, 3 | 2651 ± 3.771 | 5.149e-4 ± 1.738e-5 | 0.7696 ± 0.1014 / 0.04372 ± 0.001714 | Disabled |
-|  |  | div | 0.1 | 2 |  |  | 1, 2, 3 | 2666 ± 13.9 | 0.03258 ± 0.027 | 2.818 ± 1.785 / 0.08301 ± 0.04781 | Disabled |
-|  |  | div | 1 | 2 |  |  | 1, 2, 3 | 2660 ± 6.637 | 0.0108 ± 0.01376 | 0.4849 ± 0.3374 / 0.01343 ± 0.008997 | Disabled |
-|  | **2D Taylor–Green Vortices: Coefficients** | no-div | 0 | 2 | 5000 | 500 | 1, 2, 3 | — | 6.248e-4 ± 6.887e-5 | — / — | No OOD dataset |
-|  |  | div | 0.001 | 2 |  |  | 1, 2, 3 | 2357 ± 13.5 | 5.151e-4 ± 1.200e-4 | 2.781 ± 1.277 / 0.06078 ± 0.004351 | Disabled |
-|  |  | div | 0.01 | 2 |  |  | 1, 2, 3 | 2361 ± 4.643 | 5.582e-4 ± 5.649e-5 | 1.206 ± 0.2318 / 0.03983 ± 0.00117 | Disabled |
-|  |  | div | 0.1 | 2 |  |  | 1, 2, 3 | 2353 ± 3.408 | 6.989e-4 ± 1.637e-5 | 1.226 ± 0.8181 / 0.02358 ± 0.001319 | Disabled |
-|  |  | div | 1 | 2 |  |  | 1, 2, 3 | 2355 ± 7.376 | 0.04657 ± 0.03172 | 0.8652 ± 0.3549 / 0.03606 ± 0.01804 | Disabled |
-|  | **2D Taylor–Green Vortices: Spacetime** | no-div | 0 | 2 | 5000 | 500 | 1, 2, 3 | 6130 ± 50.4 | 0.001004 ± 2.361e-5 | 8.963 ± 1.252 / 0.1744 ± 0.01401 | Missing |
-|  |  | div | 0.001 | 2 |  |  | 1, 2, 3 | 6204 ± 9.726 | 8.393e-4 ± 2.555e-4 | 3.848 ± 2.389 / 0.09993 ± 0.01043 | Disabled |
-|  |  | div | 0.01 | 2 |  |  | 1, 2, 3 | 6204 ± 12.52 | 7.765e-4 ± 1.311e-4 | 2.961 ± 2.601 / 0.06441 ± 0.005443 | Disabled |
-|  |  | div | 0.1 | 2 |  |  | 1, 2, 3 | 6207 ± 5.152 | 8.733e-4 ± 2.379e-4 | 0.6846 ± 0.3954 / 0.0268 ± 0.002858 | Disabled |
-|  |  | div | 1 | 2 |  |  | 1, 2, 3 | 6205 ± 7.749 | 0.045 ± 0.03407 | 1.273 ± 0.6747 / 0.04854 ± 0.02696 | Disabled |
-|  | **2D Taylor–Green Vortices: Spacetime Coefficients** | no-div | 0 | 2 | 5000 | 500 | 1, 2, 3 | 5734 ± 16.08 | 0.001164 ± 2.797e-4 | 6.612 ± 0.2516 / 0.1681 ± 0.01594 | No OOD dataset |
-|  |  | div | 0.001 | 2 |  |  | 1, 2, 3 | 5971 ± 15.92 | 0.002301 ± 0.001484 | 16.49 ± 15.6 / 0.1366 ± 0.005178 | Disabled |
-|  |  | div | 0.01 | 2 |  |  | 1, 2, 3 | 5948 ± 6.008 | 0.004013 ± 0.004528 | 4.21 ± 3.337 / 0.1232 ± 0.07742 | Disabled |
-|  |  | div | 0.1 | 2 |  |  | 1, 2, 3 | 5963 ± 16.56 | 0.01523 ± 0.00892 | 4.005 ± 0.5283 / 0.07947 ± 0.02538 | Disabled |
-|  |  | div | 1 | 2 |  |  | 1, 2, 3 | 5956 ± 9.733 | 0.0201 ± 0.01306 | 0.9095 ± 0.4716 / 0.02612 ± 0.01119 | Disabled |
-|  | **2D Merging Vortices** | no-div | 0 | 2 | 500 | 500 | 1, 2, 3 | 342.3 ± 4.06 | 0.001351 ± 0.001015 | 0.999 ± 0.003457 / 0.03244 ± 1.321e-4 | 1877 ± 2030 |
-|  |  | div | 0.001 | 2 |  |  | 1, 2, 3 | 322.7 ± 1.81 | 0.001124 ± 5.654e-5 | 0.9934 ± 0.01197 / 0.03228 ± 2.174e-4 | Disabled |
-|  |  | div | 0.01 | 2 |  |  | 1, 2, 3 | 322.8 ± 0.3149 | 0.001202 ± 4.255e-4 | 0.9949 ± 0.004626 / 0.03249 ± 1.974e-4 | Disabled |
-|  |  | div | 0.1 | 2 |  |  | 1, 2, 3 | 321.7 ± 0.8905 | 0.00116 ± 3.192e-4 | 0.985 ± 0.003261 / 0.03209 ± 2.993e-5 | Disabled |
-|  |  | div | 1 | 2 |  |  | 1, 2, 3 | 322 ± 0.8656 | 0.003325 ± 3.488e-4 | 0.6326 ± 0.0241 / 0.02524 ± 4.076e-4 | Disabled |
-|  | **3D Species Transport** | no-div | 0 | 3 | 10000 | 7000 | No summary: 1, 2, 3 |  |  |  | Missing |
-|  |  | div | 0.001 | 3 |  |  | No summary: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.01 | 3 |  |  | No summary: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.1 | 3 |  |  | No summary: 1, 2, 3 |  |  |  |  |
-|  |  | div | 1 | 3 |  |  | No summary: 1, 2, 3 |  |  |  |  |
-|  | **3D Homogeneous Forced Isotropic Turbulence** | no-div | 0 | 3 | 10000 | 7000 | Missing: 1, 2, 3 |  |  |  | Missing |
-|  |  | div | 0.001 | 3 |  |  | Partial: 1 (182/500 epochs logged); Missing: 2, 3 |  |  |  |  |
-|  |  | div | 0.01 | 3 |  |  | Partial: 1 (137/500 epochs logged); Missing: 2, 3 |  |  |  |  |
-|  |  | div | 0.1 | 3 |  |  | Partial: 1 (128/500 epochs logged); Missing: 2, 3 |  |  |  |  |
-|  |  | div | 1 | 3 |  |  | Partial: 1 (126/500 epochs logged); Missing: 2, 3 |  |  |  |  |
-| **Transolver** | **2D Backward-Facing Step** | no-div | 0 | 4 | 500 | 1000 | 1, 2, 3 | 247.6 ± 0.7593 | 7.330e-4 ± 2.395e-5 | 1.987 ± 0.001957 / 9.624e-4 ± 1.416e-4 | 0.314 ± 0.007866 |
-|  |  | div | 0.001 | 4 |  |  | 1, 2, 3 | 268.7 ± 0.7835 | 7.247e-4 ± 3.489e-5 | 1.959 ± 0.01665 / 8.132e-4 ± 8.025e-5 | Disabled |
-|  |  | div | 0.01 | 4 |  |  | 1, 2, 3 | 267.4 ± 0.7281 | 7.470e-4 ± 1.118e-5 | 1.957 ± 0.008743 / 0.001016 ± 3.989e-5 | Disabled |
-|  |  | div | 0.1 | 4 |  |  | 1, 2, 3 | 266.7 ± 0.5923 | 8.028e-4 ± 8.946e-6 | 1.898 ± 0.01805 / 0.001142 ± 1.075e-4 | Disabled |
-|  |  | div | 1 | 4 |  |  | 1, 2, 3 | 266.9 ± 0.223 | 0.003593 ± 3.770e-4 | 0.8741 ± 0.02595 / 0.001149 ± 4.726e-4 | Disabled |
-|  | **2D Flow Past a Cylinder (no vortex shedding)** | no-div | 0 | 4 | 100 | 1000 | 1, 2, 3 | 56.2 ± 0.3071 | 0.00736 ± 8.214e-4 | 0.7528 ± 0.02085 / 4.141e-4 ± 1.945e-5 | 0.567 ± 0.007513 |
-|  |  | div | 0.001 | 4 |  |  | 1, 2, 3 | 60.25 ± 0.3739 | 0.00606 ± 0.001932 | 0.7609 ± 0.02347 / 4.342e-4 ± 3.342e-5 | Disabled |
-|  |  | div | 0.01 | 4 |  |  | 1, 2, 3 | 60.03 ± 0.1256 | 0.006854 ± 7.333e-4 | 0.7482 ± 0.01083 / 3.969e-4 ± 2.086e-5 | Disabled |
-|  |  | div | 0.1 | 4 |  |  | 1, 2, 3 | 60.54 ± 0.5955 | 0.005738 ± 0.002288 | 0.709 ± 0.01802 / 3.882e-4 ± 1.069e-5 | Disabled |
-|  |  | div | 1 | 4 |  |  | 1, 2, 3 | 60.15 ± 0.03407 | 0.00839 ± 8.850e-4 | 0.4693 ± 0.01988 / 4.347e-4 ± 1.550e-5 | Disabled |
-|  | **2D Flow Past a Cylinder (vortex shedding)** | no-div | 0 | 4 | 10000 | 1000 | 1; NaN: 2, 3 | 4320 ± 1.227 | 1.422e-4 | 4.895 / 0.001432 | 0.2419 |
-|  |  | div | 0.001 | 4 |  |  | 1, 2, 3 | 4685 ± 6.274 | 1.523e-4 ± 1.274e-5 | 4.889 ± 0.005282 / 0.001434 ± 9.184e-6 | Disabled |
-|  |  | div | 0.01 | 4 |  |  | NaN: 1, 2, 3 | 4691 ± 15.19 | NaN | NaN / NaN | Disabled |
-|  |  | div | 0.1 | 4 |  |  | NaN: 1, 2, 3 | 4702 ± 13.77 | NaN | NaN / NaN | Disabled |
-|  |  | div | 1 | 4 |  |  | NaN: 1, 2, 3 | 4701 ± 18.2 | NaN | NaN / NaN | Disabled |
-|  | **2D Lid-Driven Cavity Flow** | no-div | 0 | 4 | 10000 | 1000 | 2; NaN: 1, 3 | 4198 ± 27.24 | 2.010e-4 | 21.11 / 0.5714 | 0.5558 |
-|  |  | div | 0.001 | 4 |  |  | NaN: 1, 2, 3 | 4570 ± 47.92 | NaN | NaN / NaN | Disabled |
-|  |  | div | 0.01 | 4 |  |  | 1, 2; NaN: 3 | 4571 ± 9.348 | 0.002822 ± 2.432e-5 | 9.193 ± 0.02296 / 0.36 ± 0.002023 | Disabled |
-|  |  | div | 0.1 | 4 |  |  | 2; NaN: 1, 3 | 4575 ± 24.3 | 0.01174 | 1.734 / 0.05139 | Disabled |
-|  |  | div | 1 | 4 |  |  | NaN: 1, 2, 3 | 4586 ± 21.66 | NaN | NaN / NaN | Disabled |
-|  | **2D Buoyancy-Driven Cavity Flow** | no-div | 0 | 4 | 10000 | 5000 | No summary: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.001 | 4 |  |  | 1, 2, 3 | 17020 ± 6.049 | 1.932e-4 ± 1.208e-5 | 3.03 ± 0.005111 / 0.01946 ± 3.786e-5 | Disabled |
-|  |  | div | 0.01 | 4 |  |  | 1, 2, 3 | 17010 ± 8.593 | 2.309e-4 ± 4.054e-5 | 3.009 ± 0.004214 / 0.01955 ± 3.800e-5 | Disabled |
-|  |  | div | 0.1 | 4 |  |  | 1, 2, 3 | 17010 ± 8.423 | 0.001726 ± 1.203e-5 | 2.323 ± 0.004224 / 0.01874 ± 8.637e-5 | Disabled |
-|  |  | div | 1 | 4 |  |  | 1, 2, 3 | 17030 ± 22.3 | 0.006201 ± 1.037e-4 | 0.5415 ± 0.05091 / 0.01292 ± 4.891e-4 | Disabled |
-|  | **2D Taylor–Green Vortices** | no-div | 0 | 4 | 5000 | 500 | 1; NaN: 2, 3 | 2042 ± 7.277 | 1.336e-4 | 0.8245 / 0.01645 | ∞ |
-|  |  | div | 0.001 | 4 |  |  | 3; NaN: 1, 2 | 2238 ± 9.686 | 1.352e-4 | 0.5808 / 0.01616 | Disabled |
-|  |  | div | 0.01 | 4 |  |  | 1; NaN: 2, 3 | 2240 ± 16.52 | 1.072e-4 | 0.1992 / 0.01083 | Disabled |
-|  |  | div | 0.1 | 4 |  |  | NaN: 1, 2, 3 | 2215 ± 4.33 | NaN | NaN / NaN | Disabled |
-|  |  | div | 1 | 4 |  |  | NaN: 1, 2, 3 | 2244 ± 16.27 | NaN | NaN / NaN | Disabled |
-|  | **2D Taylor–Green Vortices: Coefficients** | no-div | 0 | 4 | 5000 | 500 | 1, 2, 3 | 2054 ± 5.915 | 3.632e-4 ± 3.010e-5 | 0.7201 ± 0.03859 / 0.05381 ± 0.001924 | No OOD data |
-|  |  | div | 0.001 | 4 |  |  | 2, 3; NaN: 1 | 2236 ± 14.83 | 3.111e-4 ± 2.901e-5 | 0.4555 ± 0.008472 / 0.03332 ± 4.768e-5 | Disabled |
-|  |  | div | 0.01 | 4 |  |  | 1, 2, 3 | 2213 ± 13.73 | 3.428e-4 ± 3.690e-5 | 0.2408 ± 0.0368 / 0.01845 ± 5.025e-4 | Disabled |
-|  |  | div | 0.1 | 4 |  |  | 1, 2, 3 | 2209 ± 8.647 | 3.034e-4 ± 2.914e-5 | 0.0853 ± 0.01039 / 0.007506 ± 1.666e-4 | Disabled |
-|  |  | div | 1 | 4 |  |  | NaN: 1, 2, 3 | 2238 ± 15.74 | NaN | NaN / NaN | Disabled |
-|  | **2D Taylor–Green Vortices: Spacetime** | no-div | 0 | 4 | 5000 | 500 | 1, 2, 3 | 4685 ± 13.05 | 0.003563 ± 0.004537 | 4.651 ± 4.601 / 0.2093 ± 0.2321 | ∞ |
-|  |  | div | 0.001 | 4 |  |  | 3; NaN: 1, 2 | 4884 ± 18.46 | 2.647e-4 | 0.8653 / 0.02485 | Disabled |
-|  |  | div | 0.01 | 4 |  |  | 1, 2, 3 | 4860 ± 7.404 | 2.559e-4 ± 3.448e-5 | 0.3821 ± 0.06716 / 0.01717 ± 0.00165 | Disabled |
-|  |  | div | 0.1 | 4 |  |  | 3; NaN: 1, 2 | 4881 ± 10.61 | 1.757e-4 | 0.1275 / 0.006922 | Disabled |
-|  |  | div | 1 | 4 |  |  | NaN: 1, 2, 3 | 4884 ± 6.245 | NaN | NaN / NaN | Disabled |
-|  | **2D Taylor–Green Vortices: Spacetime Coefficients** | no-div | 0 | 4 | 5000 | 500 | 1; NaN: 2, 3 | 4677 ± 10.49 | 2.609e-4 | 1.061 / 0.03734 | No OOD data |
-|  |  | div | 0.001 | 4 |  |  | 2, 3; NaN: 1 | 4871 ± 14.66 | 2.464e-4 ± 2.423e-5 | 0.526 ± 0.04795 / 0.02638 ± 0.002703 | Disabled |
-|  |  | div | 0.01 | 4 |  |  | 1, 3; NaN: 2 | 4877 ± 7.472 | 2.228e-4 ± 6.353e-6 | 0.2494 ± 0.01599 / 0.0147 ± 4.525e-4 | Disabled |
-|  |  | div | 0.1 | 4 |  |  | 2, 3; NaN: 1 | 4875 ± 7.728 | 1.878e-4 ± 5.173e-6 | 0.12 ± 0.006192 / 0.006433 ± 5.245e-6 | Disabled |
-|  |  | div | 1 | 4 |  |  | NaN: 1, 2, 3 | 4888 ± 5.612 | NaN | NaN / NaN | Disabled |
-|  | **2D Merging Vortices** | no-div | 0 | 4 | 500 | 500 | 1, 2, 3 | 209.3 ± 0.4533 | 0.003747 ± 3.802e-4 | 0.7377 ± 0.005383 / 0.03128 ± 0.001046 | 0.8056 ± 0.003242 |
-|  |  | div | 0.001 | 4 |  |  | 1, 2, 3 | 229.6 ± 1.182 | 0.003397 ± 2.319e-4 | 0.7236 ± 0.01586 / 0.03081 ± 7.019e-4 | Disabled |
-|  |  | div | 0.01 | 4 |  |  | 1, 2, 3 | 228 ± 0.9234 | 0.003497 ± 2.574e-4 | 0.7141 ± 0.005287 / 0.03122 ± 0.001046 | Disabled |
-|  |  | div | 0.1 | 4 |  |  | 1, 2, 3 | 227.9 ± 1.358 | 0.003747 ± 2.271e-4 | 0.6439 ± 0.008907 / 0.03012 ± 9.602e-4 | Disabled |
-|  |  | div | 1 | 4 |  |  | 1, 2, 3 | 227.1 ± 0.3592 | 0.005517 ± 3.048e-4 | 0.4035 ± 0.005305 / 0.02757 ± 4.458e-4 | Disabled |
-|  | **3D Species Transport** | no-div | 0 | 4 | 10000 | 7000 | 1, 2, 3 | 26110 ± 39.13 | 0.002737 ± 1.587e-4 | 1.044e+5 ± 254.9 / 981.9 ± 1.891 | 1.352 ± 0.1792 |
-|  |  | div | 0.001 | 4 |  |  | No summary: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.01 | 4 |  |  | No summary: 1, 2, 3 |  |  |  |  |
-|  |  | div | 0.1 | 4 |  |  | No summary: 1, 2, 3 |  |  |  |  |
-|  |  | div | 1 | 4 |  |  | No summary: 1, 2, 3 |  |  |  |  |
-|  | **3D Homogeneous Forced Isotropic Turbulence** | no-div | 0 | 4 | 10000 | 7000 | 1, 2; Missing: 3 | 2.263e4 ± 16 | 0.001219 ± 3.11e-5 | 2.197 ± 0.0102 / 0.03654 ± 8.93e-6 | 0.01146 ± 0.000504 |
-|  |  | div | 0.001 | 4 |  |  | 2, 3; Missing: 1 | 2.332e4 ± 77.5 | 0.001205 ± 5.49e-6 | 2.202 ± 0.0226 / 0.03648 ± 5.33e-5 | Disabled |
-|  |  | div | 0.01 | 4 |  |  | 2, 3; Missing: 1 | 2.347e4 ± 2.62 | 0.001168 ± 1.15e-5 | 2.135 ± 0.00311 / 0.03628 ± 1.76e-5 | Disabled |
-|  |  | div | 0.1 | 4 |  |  | 2, 3; Missing: 1 | 2.342e4 ± 43.3 | 0.001183 ± 2.99e-5 | 1.827 ± 0.0361 / 0.03541 ± 2.95e-5 | Disabled |
-|  |  | div | 1 | 4 |  |  | 2, 3; Missing: 1 | 2.327e4 ± 5.99 | 0.001997 ± 3.16e-6 | 0.5815 ± 0.00305 / 0.02620 ± 1.15e-5 | Disabled |
+| Framework | Dataset | Run | $\lambda$ | ntrain | npoints | Seeds / status | Time (s) | Test loss | Interior test div (max / median) | OOD loss |
+|---|---|---|---:|---:|---:|---|---:|---:|---:|---:|
+| **Geo-FNO** | **2D Backward-Facing Step** | no-div | 0 | 500 | 1000 | 1, 2, 3 | 225.7 ± 2.11 | 9.949e-5 ± 1.728e-5 | 1.981 ± 0.002382 / 4.769e-4 ± 1.255e-5 | 1.013 ± 0.194 |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 216.2 ± 2.108 | 9.259e-5 ± 9.780e-6 | 1.983 ± 0.002885 / 4.536e-4 ± 7.371e-6 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 219.4 ± 1.173 | 1.035e-4 ± 1.914e-5 | 1.98 ± 0.00212 / 4.848e-4 ± 8.368e-6 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 217.8 ± 1.275 | 1.043e-4 ± 9.781e-6 | 1.972 ± 0.00179 / 4.732e-4 ± 8.895e-6 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 217.3 ± 1.038 | 0.002127 ± 2.004e-5 | 1.286 ± 0.05033 / 6.612e-4 ± 5.633e-5 | Disabled |
+|  | **2D Flow Past a Cylinder (no vortex shedding)** | no-div | 0 | 100 | 1000 | 1, 2, 3 | 262.2 ± 1.65 | 1.618e-4 ± 4.766e-5 | 0.7716 ± 1.441e-4 / 1.117e-4 ± 2.307e-5 | 0.6449 ± 0.306 |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 180.9 ± 1.096 | 1.850e-4 ± 4.173e-5 | 0.7716 ± 3.154e-4 / 1.147e-4 ± 2.920e-5 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 179.9 ± 0.05814 | 1.555e-4 ± 3.234e-5 | 0.7716 ± 3.908e-4 / 1.056e-4 ± 1.103e-5 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 180.4 ± 0.5481 | 1.803e-4 ± 2.747e-5 | 0.7704 ± 7.570e-4 / 1.091e-4 ± 1.488e-6 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 180 ± 0.3947 | 1.838e-4 ± 2.357e-5 | 0.7601 ± 0.00248 / 1.094e-4 ± 1.013e-5 | Disabled |
+|  | **2D Flow Past a Cylinder (vortex shedding)** | no-div | 0 | 10000 | 1000 | 1, 2, 3 | 11410 ± 13.81 | 4.783e-5 ± 1.187e-5 | 4.943 ± 5.985e-4 / 0.001447 ± 1.423e-5 | Unlogged |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 11870 ± 8.008 | 3.737e-5 ± 4.751e-6 | 4.942 ± 3.975e-4 / 0.001432 ± 7.726e-6 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 11870 ± 18.3 | 4.784e-5 ± 1.093e-5 | 4.93 ± 0.006215 / 0.001433 ± 1.145e-5 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 11880 ± 11.91 | 2.032e-4 ± 2.179e-5 | 4.278 ± 0.01617 / 0.001455 ± 2.563e-5 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 11880 ± 25.7 | 0.012 ± 0.003156 | 1.138 ± 0.2216 / 0.001491 ± 2.000e-4 | Disabled |
+|  | **2D Lid-Driven Cavity Flow** | no-div | 0 | 10000 | 1000 | 1, 2, 3 | 6636 ± 48.2 | 1.509e-4 ± 2.041e-5 | 18.14 ± 9.691e-4 / 0.5722 ± 3.843e-4 | 0.5899 ± 0.0982 |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 6724 ± 19.75 | 1.795e-4 ± 2.001e-5 | 18.09 ± 0.01043 / 0.57 ± 1.670e-4 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 6734 ± 12.01 | 0.002027 ± 1.645e-5 | 9.507 ± 0.003913 / 0.3617 ± 5.243e-4 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 6756 ± 27.36 | 0.01109 ± 3.133e-4 | 2.314 ± 0.02049 / 0.04074 ± 6.557e-5 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 6742 ± 1.876 | 0.01565 ± 1.076e-4 | 0.4184 ± 0.02775 / 0.008379 ± 2.090e-4 | Disabled |
+|  | **2D Buoyancy-Driven Cavity Flow** | no-div | 0 | 10000 | 5000 | 1, 2, 3 | 21160 ± 7.866 | 1.421e-4 ± 6.241e-6 | 3.546 ± 0.002381 / 0.0198 ± 7.664e-5 | No OOD dataset |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 21600 ± 19.28 | 1.571e-4 ± 1.324e-6 | 3.513 ± 0.007005 / 0.01985 ± 3.330e-5 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 21630 ± 9.716 | 1.644e-4 ± 7.940e-6 | 3.454 ± 0.007804 / 0.01949 ± 7.262e-5 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 21610 ± 33.21 | 0.001926 ± 2.630e-6 | 2.095 ± 0.003948 / 0.009561 ± 2.793e-4 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 21610 ± 22.73 | 0.005727 ± 3.916e-5 | 0.5015 ± 0.009256 / 0.004568 ± 6.371e-4 | Disabled |
+|  | **2D Taylor–Green Vortices** | no-div | 0 | 5000 | 500 | 1, 2, 3 | 2606 ± 37.2 | 4.181e-4 ± 2.939e-5 | 2.563 ± 0.9359 / 0.0937 ± 0.004725 | ∞ |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 2646 ± 4.866 | 5.070e-4 ± 1.607e-4 | 5.037 ± 5.223 / 0.06777 ± 0.004779 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 2651 ± 3.771 | 5.149e-4 ± 1.738e-5 | 0.7696 ± 0.1014 / 0.04372 ± 0.001714 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 2666 ± 13.9 | 0.03258 ± 0.027 | 2.818 ± 1.785 / 0.08301 ± 0.04781 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 2660 ± 6.637 | 0.0108 ± 0.01376 | 0.4849 ± 0.3374 / 0.01343 ± 0.008997 | Disabled |
+|  | **2D Taylor–Green Vortices: Coefficients** | no-div | 0 | 5000 | 500 | 1, 2, 3 | — | 6.248e-4 ± 6.887e-5 | — / — | No OOD dataset |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 2357 ± 13.5 | 5.151e-4 ± 1.200e-4 | 2.781 ± 1.277 / 0.06078 ± 0.004351 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 2361 ± 4.643 | 5.582e-4 ± 5.649e-5 | 1.206 ± 0.2318 / 0.03983 ± 0.00117 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 2353 ± 3.408 | 6.989e-4 ± 1.637e-5 | 1.226 ± 0.8181 / 0.02358 ± 0.001319 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 2355 ± 7.376 | 0.04657 ± 0.03172 | 0.8652 ± 0.3549 / 0.03606 ± 0.01804 | Disabled |
+|  | **2D Taylor–Green Vortices: Spacetime** | no-div | 0 | 5000 | 500 | 1, 2, 3 | 6130 ± 50.4 | 0.001004 ± 2.361e-5 | 8.963 ± 1.252 / 0.1744 ± 0.01401 | ∞ |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 6204 ± 9.726 | 8.393e-4 ± 2.555e-4 | 3.848 ± 2.389 / 0.09993 ± 0.01043 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 6204 ± 12.52 | 7.765e-4 ± 1.311e-4 | 2.961 ± 2.601 / 0.06441 ± 0.005443 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 6207 ± 5.152 | 8.733e-4 ± 2.379e-4 | 0.6846 ± 0.3954 / 0.0268 ± 0.002858 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 6205 ± 7.749 | 0.045 ± 0.03407 | 1.273 ± 0.6747 / 0.04854 ± 0.02696 | Disabled |
+|  | **2D Taylor–Green Vortices: Spacetime Coefficients** | no-div | 0 | 5000 | 500 | 1, 2, 3 | 5734 ± 16.08 | 0.001164 ± 2.797e-4 | 6.612 ± 0.2516 / 0.1681 ± 0.01594 | No OOD dataset |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 5971 ± 15.92 | 0.002301 ± 0.001484 | 16.49 ± 15.6 / 0.1366 ± 0.005178 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 5948 ± 6.008 | 0.004013 ± 0.004528 | 4.21 ± 3.337 / 0.1232 ± 0.07742 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 5963 ± 16.56 | 0.01523 ± 0.00892 | 4.005 ± 0.5283 / 0.07947 ± 0.02538 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 5956 ± 9.733 | 0.0201 ± 0.01306 | 0.9095 ± 0.4716 / 0.02612 ± 0.01119 | Disabled |
+|  | **2D Merging Vortices** | no-div | 0 | 500 | 500 | 1, 2, 3 | 342.3 ± 4.06 | 0.001351 ± 0.001015 | 0.999 ± 0.003457 / 0.03244 ± 1.321e-4 | 1877 ± 2030 |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 322.7 ± 1.81 | 0.001124 ± 5.654e-5 | 0.9934 ± 0.01197 / 0.03228 ± 2.174e-4 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 322.8 ± 0.3149 | 0.001202 ± 4.255e-4 | 0.9949 ± 0.004626 / 0.03249 ± 1.974e-4 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 321.7 ± 0.8905 | 0.00116 ± 3.192e-4 | 0.985 ± 0.003261 / 0.03209 ± 2.993e-5 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 322 ± 0.8656 | 0.003325 ± 3.488e-4 | 0.6326 ± 0.0241 / 0.02524 ± 4.076e-4 | Disabled |
+|  | **3D Species Transport** | no-div | 0 | 10000 | 7000 | Failed: 1, 2, 3 |  |  |  | Missing |
+|  |  | div | 0.001 |  |  | No summary: 1, 2, 3 |  |  |  |  |
+|  |  | div | 0.01 |  |  | No summary: 1, 2, 3 |  |  |  |  |
+|  |  | div | 0.1 |  |  | No summary: 1, 2, 3 |  |  |  |  |
+|  |  | div | 1 |  |  | No summary: 1, 2, 3 |  |  |  |  |
+|  | **3D Homogeneous Forced Isotropic Turbulence** | no-div | 0 | 10000 | 7000 | Failed: 1, 2, 3 |  |  |  | Missing |
+|  |  | div | 0.001 |  |  | 1, 2; Failed: 3 | 1.168e5 ± 30.56 | 1.638e-4 ± 3.334e-5 | 1.818 ± 0.003715 / 0.04336 ± 7.898e-6 | Disabled |
+|  |  | div | 0.01 |  |  | 1; Failed: 2, 3 | 1.168e5 | 1.269e-4 | 1.803 / 0.04332 | Disabled |
+|  |  | div | 0.1 |  |  | 1; Failed: 2, 3 | 1.167e5 | 1.229e-4 | 1.776 / 0.04316 | Disabled |
+|  |  | div | 1 |  |  | 1; Failed: 2, 3 | 1.172e5 | 0.001547 | 0.8231 / 0.03182 | Disabled |
+| **Transolver** | **2D Backward-Facing Step** | no-div | 0 | 500 | 1000 | 1, 2, 3 | 247.6 ± 0.7593 | 7.330e-4 ± 2.395e-5 | 1.987 ± 0.001957 / 9.624e-4 ± 1.416e-4 | 0.314 ± 0.007866 |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 268.7 ± 0.7835 | 7.247e-4 ± 3.489e-5 | 1.959 ± 0.01665 / 8.132e-4 ± 8.025e-5 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 267.4 ± 0.7281 | 7.470e-4 ± 1.118e-5 | 1.957 ± 0.008743 / 0.001016 ± 3.989e-5 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 266.7 ± 0.5923 | 8.028e-4 ± 8.946e-6 | 1.898 ± 0.01805 / 0.001142 ± 1.075e-4 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 266.9 ± 0.223 | 0.003593 ± 3.770e-4 | 0.8741 ± 0.02595 / 0.001149 ± 4.726e-4 | Disabled |
+|  | **2D Flow Past a Cylinder (no vortex shedding)** | no-div | 0 | 100 | 1000 | 1, 2, 3 | 56.2 ± 0.3071 | 0.00736 ± 8.214e-4 | 0.7528 ± 0.02085 / 4.141e-4 ± 1.945e-5 | 0.567 ± 0.007513 |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 60.25 ± 0.3739 | 0.00606 ± 0.001932 | 0.7609 ± 0.02347 / 4.342e-4 ± 3.342e-5 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 60.03 ± 0.1256 | 0.006854 ± 7.333e-4 | 0.7482 ± 0.01083 / 3.969e-4 ± 2.086e-5 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 60.54 ± 0.5955 | 0.005738 ± 0.002288 | 0.709 ± 0.01802 / 3.882e-4 ± 1.069e-5 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 60.15 ± 0.03407 | 0.00839 ± 8.850e-4 | 0.4693 ± 0.01988 / 4.347e-4 ± 1.550e-5 | Disabled |
+|  | **2D Flow Past a Cylinder (vortex shedding)** | no-div | 0 | 10000 | 1000 | 1; NaN: 2, 3 | 4320 ± 1.227 | 1.422e-4 | 4.895 / 0.001432 | 0.2419 |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 4685 ± 6.274 | 1.523e-4 ± 1.274e-5 | 4.889 ± 0.005282 / 0.001434 ± 9.184e-6 | Disabled |
+|  |  | div | 0.01 |  |  | NaN: 1, 2, 3 | 4691 ± 15.19 | NaN | NaN / NaN | Disabled |
+|  |  | div | 0.1 |  |  | NaN: 1, 2, 3 | 4702 ± 13.77 | NaN | NaN / NaN | Disabled |
+|  |  | div | 1 |  |  | NaN: 1, 2, 3 | 4701 ± 18.2 | NaN | NaN / NaN | Disabled |
+|  | **2D Lid-Driven Cavity Flow** | no-div | 0 | 10000 | 1000 | 2; NaN: 1, 3 | 4198 ± 27.24 | 2.010e-4 | 21.11 / 0.5714 | 0.5558 |
+|  |  | div | 0.001 |  |  | NaN: 1, 2, 3 | 4570 ± 47.92 | NaN | NaN / NaN | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2; NaN: 3 | 4571 ± 9.348 | 0.002822 ± 2.432e-5 | 9.193 ± 0.02296 / 0.36 ± 0.002023 | Disabled |
+|  |  | div | 0.1 |  |  | 2; NaN: 1, 3 | 4575 ± 24.3 | 0.01174 | 1.734 / 0.05139 | Disabled |
+|  |  | div | 1 |  |  | NaN: 1, 2, 3 | 4586 ± 21.66 | NaN | NaN / NaN | Disabled |
+|  | **2D Buoyancy-Driven Cavity Flow** | no-div | 0 | 10000 | 5000 | No summary: 1, 2, 3 |  |  |  |  |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 17020 ± 6.049 | 1.932e-4 ± 1.208e-5 | 3.03 ± 0.005111 / 0.01946 ± 3.786e-5 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 17010 ± 8.593 | 2.309e-4 ± 4.054e-5 | 3.009 ± 0.004214 / 0.01955 ± 3.800e-5 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 17010 ± 8.423 | 0.001726 ± 1.203e-5 | 2.323 ± 0.004224 / 0.01874 ± 8.637e-5 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 17030 ± 22.3 | 0.006201 ± 1.037e-4 | 0.5415 ± 0.05091 / 0.01292 ± 4.891e-4 | Disabled |
+|  | **2D Taylor–Green Vortices** | no-div | 0 | 5000 | 500 | 1; NaN: 2, 3 | 2042 ± 7.277 | 1.336e-4 | 0.8245 / 0.01645 | ∞ |
+|  |  | div | 0.001 |  |  | 3; NaN: 1, 2 | 2238 ± 9.686 | 1.352e-4 | 0.5808 / 0.01616 | Disabled |
+|  |  | div | 0.01 |  |  | 1; NaN: 2, 3 | 2240 ± 16.52 | 1.072e-4 | 0.1992 / 0.01083 | Disabled |
+|  |  | div | 0.1 |  |  | NaN: 1, 2, 3 | 2215 ± 4.33 | NaN | NaN / NaN | Disabled |
+|  |  | div | 1 |  |  | NaN: 1, 2, 3 | 2244 ± 16.27 | NaN | NaN / NaN | Disabled |
+|  | **2D Taylor–Green Vortices: Coefficients** | no-div | 0 | 5000 | 500 | 1, 2, 3 | 2054 ± 5.915 | 3.632e-4 ± 3.010e-5 | 0.7201 ± 0.03859 / 0.05381 ± 0.001924 | No OOD data |
+|  |  | div | 0.001 |  |  | 2, 3; NaN: 1 | 2236 ± 14.83 | 3.111e-4 ± 2.901e-5 | 0.4555 ± 0.008472 / 0.03332 ± 4.768e-5 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 2213 ± 13.73 | 3.428e-4 ± 3.690e-5 | 0.2408 ± 0.0368 / 0.01845 ± 5.025e-4 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 2209 ± 8.647 | 3.034e-4 ± 2.914e-5 | 0.0853 ± 0.01039 / 0.007506 ± 1.666e-4 | Disabled |
+|  |  | div | 1 |  |  | NaN: 1, 2, 3 | 2238 ± 15.74 | NaN | NaN / NaN | Disabled |
+|  | **2D Taylor–Green Vortices: Spacetime** | no-div | 0 | 5000 | 500 | 1, 2, 3 | 4685 ± 13.05 | 0.003563 ± 0.004537 | 4.651 ± 4.601 / 0.2093 ± 0.2321 | ∞ |
+|  |  | div | 0.001 |  |  | 3; NaN: 1, 2 | 4884 ± 18.46 | 2.647e-4 | 0.8653 / 0.02485 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 4860 ± 7.404 | 2.559e-4 ± 3.448e-5 | 0.3821 ± 0.06716 / 0.01717 ± 0.00165 | Disabled |
+|  |  | div | 0.1 |  |  | 3; NaN: 1, 2 | 4881 ± 10.61 | 1.757e-4 | 0.1275 / 0.006922 | Disabled |
+|  |  | div | 1 |  |  | NaN: 1, 2, 3 | 4884 ± 6.245 | NaN | NaN / NaN | Disabled |
+|  | **2D Taylor–Green Vortices: Spacetime Coefficients** | no-div | 0 | 5000 | 500 | 1; NaN: 2, 3 | 4677 ± 10.49 | 2.609e-4 | 1.061 / 0.03734 | No OOD data |
+|  |  | div | 0.001 |  |  | 2, 3; NaN: 1 | 4871 ± 14.66 | 2.464e-4 ± 2.423e-5 | 0.526 ± 0.04795 / 0.02638 ± 0.002703 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 3; NaN: 2 | 4877 ± 7.472 | 2.228e-4 ± 6.353e-6 | 0.2494 ± 0.01599 / 0.0147 ± 4.525e-4 | Disabled |
+|  |  | div | 0.1 |  |  | 2, 3; NaN: 1 | 4875 ± 7.728 | 1.878e-4 ± 5.173e-6 | 0.12 ± 0.006192 / 0.006433 ± 5.245e-6 | Disabled |
+|  |  | div | 1 |  |  | NaN: 1, 2, 3 | 4888 ± 5.612 | NaN | NaN / NaN | Disabled |
+|  | **2D Merging Vortices** | no-div | 0 | 500 | 500 | 1, 2, 3 | 209.3 ± 0.4533 | 0.003747 ± 3.802e-4 | 0.7377 ± 0.005383 / 0.03128 ± 0.001046 | 0.8056 ± 0.003242 |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 229.6 ± 1.182 | 0.003397 ± 2.319e-4 | 0.7236 ± 0.01586 / 0.03081 ± 7.019e-4 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 228 ± 0.9234 | 0.003497 ± 2.574e-4 | 0.7141 ± 0.005287 / 0.03122 ± 0.001046 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 227.9 ± 1.358 | 0.003747 ± 2.271e-4 | 0.6439 ± 0.008907 / 0.03012 ± 9.602e-4 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 227.1 ± 0.3592 | 0.005517 ± 3.048e-4 | 0.4035 ± 0.005305 / 0.02757 ± 4.458e-4 | Disabled |
+|  | **3D Species Transport** | no-div | 0 | 10000 | 7000 | 1, 2, 3 | 26110 ± 39.13 | 0.002737 ± 1.587e-4 | 1.044e+5 ± 254.9 / 981.9 ± 1.891 | 1.352 ± 0.1792 |
+|  |  | div | 0.001 |  |  | No summary: 1, 2, 3 |  |  |  |  |
+|  |  | div | 0.01 |  |  | No summary: 1, 2, 3 |  |  |  |  |
+|  |  | div | 0.1 |  |  | No summary: 1, 2, 3 |  |  |  |  |
+|  |  | div | 1 |  |  | No summary: 1, 2, 3 |  |  |  |  |
+|  | **3D Homogeneous Forced Isotropic Turbulence** | no-div | 0 | 10000 | 7000 | 1, 2; Failed: 3 | 2.263e4 ± 16 | 0.001219 ± 3.11e-5 | 2.197 ± 0.0102 / 0.03654 ± 8.93e-6 | 0.01146 ± 0.000504 |
+|  |  | div | 0.001 |  |  | 1, 2, 3 | 2.335e4 ± 76.98 | 0.001190 ± 2.138e-5 | 2.196 ± 0.02044 / 0.03647 ± 4.397e-5 | Disabled |
+|  |  | div | 0.01 |  |  | 1, 2, 3 | 2.341e4 ± 87.06 | 0.001154 ± 2.239e-5 | 2.142 ± 0.01052 / 0.03630 ± 2.489e-5 | Disabled |
+|  |  | div | 0.1 |  |  | 1, 2, 3 | 2.342e4 ± 35.74 | 0.001183 ± 2.445e-5 | 1.838 ± 0.03391 / 0.03539 ± 4.227e-5 | Disabled |
+|  |  | div | 1 |  |  | 1, 2, 3 | 2.328e4 ± 16.10 | 0.001996 ± 3.245e-6 | 0.5789 ± 0.004551 / 0.02619 ± 1.841e-5 | Disabled |
 
 ## Forced-turbulence training-size sweep
 
-All rows are no-div, with 7,000 requested points. Both models have all three seeds for training sizes 100, 500, and 1,000. At 5,000, Transolver has seeds 2 and 3 completed and Geo-FNO has seed 1 partial; at 7,000, Transolver has seeds 1 and 2 completed while Geo-FNO's seeds are absent. The 10,000-training-sample configurations are listed in the main table.
+All rows are no-div, with 7,000 requested points. Both models have all three seeds for training sizes 100, 500, and 1,000. At 5,000, Transolver has all three seeds completed and Geo-FNO has seed 1 completed; at 7,000, Transolver has seeds 1 and 2 completed while Geo-FNO's seeds are absent. The 10,000-training-sample configurations are listed in the main table. Failed Geo-FNO 5,000-sample and Transolver 7,000-sample attempts reached checkpoint saves on an inaccessible `/projects/bfel` path.
 
-| Framework | ntrain | npoints | Div. order | Seeds / status | Time (s) | Test loss | Interior test div (max / median) | OOD loss |
-|---|---:|---:|---:|---|---:|---:|---:|---:|
-| **Geo-FNO** | 100 | 7000 | 3 | 1, 2, 3 | 1233 ± 3.357 | 0.003366 ± 4.830e-4 | 2.122 ± 0.1829 / 0.04704 ± 0.00103 | 0.07986 ± 0.009248 |
-|  | 500 | 7000 | 3 | 1, 2, 3 | 5910 ± 53.29 | 6.709e-4 ± 5.359e-5 | 1.822 ± 0.007078 / 0.04356 ± 5.227e-5 | 0.03947 ± 0.004512 |
-|  | 1000 | 7000 | 3 | 1, 2, 3 | 11920 ± 44.48 | 4.357e-4 ± 3.528e-5 | 1.809 ± 0.003655 / 0.04343 ± 1.162e-5 | 0.02816 ± 0.002435 |
-|  | 5000 | 7000 | 3 | Partial: 1 (322/500 epochs logged); Missing: 2, 3 |  |  |  |  |
-|  | 7000 | 7000 | 3 | Missing: 1, 2, 3 |  |  |  |  |
-| **Transolver** | 100 | 7000 | 4 | 1, 2, 3 | 228.9 ± 0.7924 | 0.02715 ± 2.720e-4 | 3.111 ± 0.2398 / 0.07385 ± 0.001233 | 0.06246 ± 7.209e-5 |
-|  | 500 | 7000 | 4 | 1, 2, 3 | 1132 ± 0.7685 | 0.01112 ± 2.876e-4 | 2.752 ± 0.1331 / 0.04643 ± 6.002e-4 | 0.04097 ± 8.927e-4 |
-|  | 1000 | 7000 | 4 | 1, 2, 3 | 2259 ± 0.7044 | 0.005438 ± 1.573e-4 | 2.528 ± 0.1365 / 0.03984 ± 9.238e-5 | 0.02715 ± 6.270e-4 |
-|  | 5000 | 7000 | 4 | 2, 3; Missing: 1 | 1.130e4 ± 3.2 | 0.001699 ± 3.67e-5 | 2.218 ± 8.46e-6 / 0.03678 ± 7.97e-6 | 0.01394 ± 6.17e-5 |
-|  | 7000 | 7000 | 4 | 1, 2; Missing: 3 | 1.587e4 ± 2.7 | 0.001396 ± 4.05e-5 | 2.230 ± 0.0178 / 0.03663 ± 9.14e-5 | 0.01269 ± 0.00122 |
+| Framework | ntrain | npoints | Seeds / status | Time (s) | Test loss | Interior test div (max / median) | OOD loss |
+|---|---:|---:|---|---:|---:|---:|---:|
+| **Geo-FNO** | 100 | 7000 | 1, 2, 3 | 1233 ± 3.357 | 0.003366 ± 4.830e-4 | 2.122 ± 0.1829 / 0.04704 ± 0.00103 | 0.07986 ± 0.009248 |
+|  | 500 | 7000 | 1, 2, 3 | 5910 ± 53.29 | 6.709e-4 ± 5.359e-5 | 1.822 ± 0.007078 / 0.04356 ± 5.227e-5 | 0.03947 ± 0.004512 |
+|  | 1000 | 7000 | 1, 2, 3 | 11920 ± 44.48 | 4.357e-4 ± 3.528e-5 | 1.809 ± 0.003655 / 0.04343 ± 1.162e-5 | 0.02816 ± 0.002435 |
+|  | 5000 | 7000 | 1; Failed: 2, 3 | 5.787e4 | 1.891e-4 | 1.806 / 0.04335 | 0.01766 |
+|  | 7000 | 7000 | Missing: 1, 2, 3 |  |  |  |  |
+| **Transolver** | 100 | 7000 | 1, 2, 3 | 228.9 ± 0.7924 | 0.02715 ± 2.720e-4 | 3.111 ± 0.2398 / 0.07385 ± 0.001233 | 0.06246 ± 7.209e-5 |
+|  | 500 | 7000 | 1, 2, 3 | 1132 ± 0.7685 | 0.01112 ± 2.876e-4 | 2.752 ± 0.1331 / 0.04643 ± 6.002e-4 | 0.04097 ± 8.927e-4 |
+|  | 1000 | 7000 | 1, 2, 3 | 2259 ± 0.7044 | 0.005438 ± 1.573e-4 | 2.528 ± 0.1365 / 0.03984 ± 9.238e-5 | 0.02715 ± 6.270e-4 |
+|  | 5000 | 7000 | 1, 2, 3 | 1.131e4 ± 7.660 | 0.001701 ± 3.010e-5 | 2.207 ± 0.01534 / 0.03681 ± 3.803e-5 | 0.01389 ± 9.087e-5 |
+|  | 7000 | 7000 | 1, 2; Failed: 3 | 1.587e4 ± 2.7 | 0.001396 ± 4.05e-5 | 2.230 ± 0.0178 / 0.03663 ± 9.14e-5 | 0.01269 ± 0.00122 |
 
 ## Completion notes
 
@@ -179,10 +193,13 @@ All rows are no-div, with 7,000 requested points. Both models have all three see
 - The table selects 358 distinct seed/configuration attempts from 373 cached runs: 270 finite final test losses, 53 NaN test losses, 30 old attempts without summaries, and five partial reruns. Fifteen earlier failed attempts are superseded, not averaged into the new results.
 - All four Transolver buoyancy div weights now have seeds 1, 2, 3. Its no-div/OOD case was not rerun because the OOD file is absent. Geo-FNO's existing buoyancy baseline is retained with `No OOD data`.
 - Transolver species no-div now has all three seeds and OOD results. No new Geo-FNO species result is present; species div training was outside the rerun scope.
-- Forced-turbulence div training has only seed 1 cached for each weight: completed for Transolver, partial for Geo-FNO. The 10,000-training-sample no-div runs for both models are absent.
-- The five partial Geo-FNO runs have logged 182/500, 137/500, 128/500, and 126/500 epochs for the four forced-turbulence div weights, respectively, and 322/500 epochs for its 5,000-sample no-div sweep. No interim training loss is substituted for final test or OOD loss.
+- Transolver forced-turbulence div training is complete for all weights and all three seeds. Geo-FNO has two finite seeds at $\lambda=0.001$ and one at each other weight; remaining attempts failed at checkpoint writes to `/projects/bfel`.
+- Transolver forced-turbulence no-div is complete for seeds 1 and 2; seed 3 failed at checkpoint write. All three Geo-FNO no-div seeds failed at checkpoint writes. Geo-FNO's 5,000-sample sweep has only seed 1; no 7,000-sample attempts are cached.
 - All 22 new completed no-div runs have OOD losses in their summaries: 19 forced-turbulence sweep runs and three Transolver species baselines. The earlier Geo-FNO baseline OOD losses remain unavailable; they were not restored by these reruns.
 - Geo-FNO's original Taylor–Green coefficient baselines still lack summary time and divergence fields because of the old logging-step issue. The buoyancy and both Taylor–Green coefficient OOD datasets were missing in the original baseline runs.
+- Geo-FNO cylinder-shedding training and test evaluation finished for all three seeds, but the old W&B code logged `ood_available` without a step and then logged OOD loss at the previous epoch step; W&B did not retain the OOD value. The later recovery attempts failed at checkpoint writes to `/projects/bfel`. The recovery script now uses the original 1,000-point budget and the current metric logger.
+- Geo-FNO Taylor–Green and spacetime OOD evaluations reported `∞`: among the deterministic 100 OOD functions, 10 static and one spacetime targets have exactly zero norm. Their recovery attempts also hit the old output path; spacetime attempts with `--npoints=all` exhausted GPU memory. The recovery script now uses 500 points and Eq. (4) in both trainers.
+- The September 18–20 recovery attempts add no new finite table metrics beyond the already incorporated results. Twenty attempts failed while creating their configured output directories, and three Taylor–Green spacetime attempts stopped with CUDA out-of-memory errors.
 - Missing files are treated as out-of-scope for the rerun launcher; old attempted rows remain visible for provenance. An absent run in this cache alone does not establish whether it was skipped, queued, running, or failed remotely.
 
 ## Run provenance

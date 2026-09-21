@@ -56,6 +56,9 @@ class RunArtifacts:
         self.metrics = {}
         self.elapsed = 0.
         self.started = time.perf_counter()
+        self.metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        if args.save and getattr(args, "calc_div", False):
+            Path(args.div_folder).mkdir(parents=True, exist_ok=True)
 
     def log(self, metrics):
         self.metrics.update(metrics)

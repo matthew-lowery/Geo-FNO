@@ -11,83 +11,13 @@ from model_3d import FNO3d, IPHI
 import wandb
 import time
 import scipy
-from itertools import product
-from scipy.linalg import lstsq
-from scipy.spatial import cKDTree
 from ram_dataset_loader import DEFAULT_DATA_ROOT, load_dataset, try_load_ood_dataset
-from divergence_metrics import summarize_divergence
+from divergence_metrics import build_rbf_fd_gradient, summarize_divergence
 from dataset_boundaries import divergence_interior_mask
 from run_artifacts import (RunArtifacts, add_runtime_arguments, validate_runtime,
                            require_finite, check_gradients)
 
 
-def build_rbf_fd_gradient(points, order=2):
-    points = np.asarray(points, dtype=np.float64)
-    spatial_dim = points.shape[1]
-    poly_powers = np.asarray([
-        powers for powers in product(range(order + 1), repeat=spatial_dim)
-        if sum(powers) <= order
-    ])
-    poly_count = len(poly_powers)
-    stencil_size = 2 * poly_count + 1
-    if stencil_size > len(points):
-        raise ValueError(f"RBF-FD stencil needs {stencil_size} points, got {len(points)}")
-
-    rbf_power = order if order % 2 else order - 1
-    rbf_power = min(max(rbf_power, 5), 11)
-    tree = cKDTree(points)
-    rows = np.repeat(np.arange(len(points)), stencil_size)
-    columns = np.empty_like(rows)
-    weights = np.empty((spatial_dim, len(rows)), dtype=np.float64)
-    eps = np.finfo(np.float64).eps
-
-    for center_idx, center in enumerate(points):
-        distances, stencil = tree.query(center, k=stencil_size)
-        stencil_points = points[stencil]
-        scale = distances[-1]
-        if not np.isfinite(scale) or scale <= eps:
-            raise ValueError("RBF-FD stencil contains coincident points")
-        local_points = (stencil_points - center) / scale
-        pairwise = np.linalg.norm(
-            local_points[:, None] - local_points[None, :], axis=-1
-        )
-        polys = np.prod(
-            local_points[:, None, :] ** poly_powers[None, :, :], axis=-1
-        )
-        system = np.block([
-            [pairwise ** rbf_power, polys],
-            [polys.T, np.zeros((poly_count, poly_count))],
-        ])
-
-        derivative = np.zeros((stencil_size + poly_count, spatial_dim))
-        derivative[:stencil_size] = (
-            -local_points
-            * rbf_power
-            * (pairwise[0, :, None] + eps) ** (rbf_power - 2)
-            / scale
-        )
-        for axis in range(spatial_dim):
-            first_power = np.zeros(spatial_dim, dtype=int)
-            first_power[axis] = 1
-            poly_idx = np.flatnonzero(np.all(poly_powers == first_power, axis=1))[0]
-            derivative[stencil_size + poly_idx, axis] = 1 / scale
-
-        local_weights = lstsq(
-            system, derivative, lapack_driver='gelsy', check_finite=False
-        )[0]
-        block = slice(center_idx * stencil_size, (center_idx + 1) * stencil_size)
-        columns[block] = stencil
-        weights[:, block] = local_weights[:stencil_size].T
-
-    indices = torch.tensor(np.stack((rows, columns)), dtype=torch.long)
-    return tuple(
-        torch.sparse_coo_tensor(
-            indices,
-            torch.tensor(axis_weights, dtype=torch.float32),
-            (len(points), len(points)),
-        ).coalesce()
-        for axis_weights in weights
-    )
 
 
 def divergence_loss(vector_field, gradient_operators, interior_mask, time_steps=1):
@@ -135,8 +65,8 @@ parser.add_argument('--div-order', type=int, default=2,
 parser.add_argument('--div-loss', action='store_true')
 parser.add_argument('--div-loss-weight', type=float, default=1.0)
 parser.add_argument('--project-name', type=str, default='ramansh')
-parser.add_argument('--div-folder', type=str, default='/projects/bfel/mlowery/geo-fno_divs')
-parser.add_argument('--model-folder', type=str, default='/projects/bfel/mlowery/geo-fno_models')
+parser.add_argument('--div-folder', type=str, default='/projects/bgcs/mlowery/geo-fno_divs')
+parser.add_argument('--model-folder', type=str, default='/projects/bgcs/mlowery/geo-fno_models')
 parser.add_argument('--dataset', type=str, default='taylor_green_time', choices=['taylor_green_time', 'taylor_green_spacetime', 'species_transport', 'taylor_green_time_coeffs', 'taylor_green_spacetime_coeffs', 'forced_turb'])
 parser.add_argument('--no-ood', dest='eval_ood', action='store_false')
 parser.set_defaults(eval_ood=True)
@@ -249,7 +179,7 @@ if args.div_loss or args.calc_div:
         physical_grid = physical_output_grid[:, :out_channels]
     gradient_operators = tuple(
         operator.cuda()
-        for operator in build_rbf_fd_gradient(physical_grid, order=args.div_order)
+        for operator in build_rbf_fd_gradient(physical_grid, order=args.div_order, normalize_axes=True)
     )
     interior_mask = divergence_interior_mask(physical_grid, args.dataset, args.data_root).cuda()
 
@@ -385,7 +315,9 @@ if ood_dataset is not None:
         torch.utils.data.TensorDataset(ood_x, ood_x_grid, ood_y, ood_y_grid),
         batch_size=batch_size, shuffle=False
     )
+    pooled_ood = args.dataset == 'taylor_green_spacetime'
     ood_loss = 0.0
+    error_sq = target_sq = 0.0
     with torch.no_grad():
         for x, x_grid_batch, y, y_grid_batch in ood_loader:
             x, x_grid_batch = x.cuda(), x_grid_batch.cuda()
@@ -393,9 +325,19 @@ if ood_dataset is not None:
             inp = torch.concat((x, x_grid_batch), axis=-1)
             out = model(inp, code=None, x_in=x_grid_batch, x_out=y_grid_batch, iphi=model_iphi)
             out = y_normalizer.decode(out)
-            ood_loss += myloss(out.double().reshape(len(x), -1), y.double().reshape(len(x), -1)).item()
-    ood_loss /= len(ood_x)
-    artifacts.log({'ood_loss': ood_loss, f'ood/{args.dataset}': ood_loss})
+            if pooled_ood:
+                error_sq += (out.double() - y.double()).square().sum().item()
+                target_sq += y.double().square().sum().item()
+            else:
+                ood_loss += myloss(out.double().reshape(len(x), -1), y.double().reshape(len(x), -1)).item()
+    if pooled_ood:
+        if target_sq == 0:
+            raise ValueError('Taylor-Green spacetime OOD targets have zero pooled norm')
+        ood_loss = (error_sq / target_sq) ** 0.5
+    else:
+        ood_loss /= len(ood_x)
+    artifacts.log({'ood_loss': ood_loss, f'ood/{args.dataset}': ood_loss,
+                   'ood_metric': 'pooled_relative_l2' if pooled_ood else 'mean_relative_l2'})
 
 ### saving model for later use
 if args.save and args.calc_div:

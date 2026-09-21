@@ -24,6 +24,6 @@ bash train_geo_ood_missing.sh --check  # preflight without submission
 bash train_geo_ood_missing.sh --submit
 ```
 
-Optional filters: `--dataset NAME`, `--seed N`, `--ntrain N`. The script rejects Transolver, div-training, and `--remaining` selections. Results default to `/projects/bfel/mlowery/operator-benchmarks/geo-ood-recovery-20260916`; job names begin with `oodfix_`. Existing results are not overwritten by the default paths. `RAM_RESULTS_ROOT`, `RAM_DATA_ROOT`, and `TRAIN_PYTHON` remain available as overrides. Repeated submissions are not automatically deduplicated against Slurm.
+Optional filters: `--dataset NAME`, `--seed N`, `--ntrain N`. The script rejects Transolver, div-training, and `--remaining` selections. Results default to `/projects/bgcs/mlowery/operator-benchmarks/geo-ood-recovery-20260916`; job names begin with `oodfix_`. Existing results are not overwritten by the default paths. `RAM_RESULTS_ROOT`, `RAM_DATA_ROOT`, and `TRAIN_PYTHON` remain available as overrides. Repeated submissions are not automatically deduplicated against Slurm.
 
 The local preflight passes for all 21 jobs and 14 MATLAB files. No jobs have been submitted.

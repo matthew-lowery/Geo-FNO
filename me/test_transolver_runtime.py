@@ -3,11 +3,25 @@ import unittest
 import numpy as np
 import torch
 
-from transolver.train import divergence_loss, pad_inputs, union_grid
+from transolver.train import divergence_loss, evaluate, pad_inputs, union_grid
 from transolver.model.Physics_Attention import Physics_Attention_Irregular_Mesh
 
 
 class TransolverRuntimeTest(unittest.TestCase):
+    def test_pooled_ood_loss_handles_zero_target_functions(self):
+        class ConstantModel(torch.nn.Module):
+            def forward(self, positions, fx):
+                return torch.ones(len(fx), positions.shape[1], 2)
+
+        inputs = torch.zeros(2, 2, 1)
+        targets = torch.zeros(2, 2, 2)
+        targets[1] = 1
+        normalizer = type("Identity", (), {"decode": lambda self, x: x})()
+        positions = torch.zeros(1, 2, 2)
+        _, loss = evaluate(ConstantModel(), positions, inputs, targets,
+                           normalizer, torch.arange(2), batch_size=1, pooled=True)
+        self.assertAlmostEqual(loss, 1.)
+
     def test_zero_slice_temperature_has_finite_output_and_gradients(self):
         attention = Physics_Attention_Irregular_Mesh(8, heads=2, dim_head=4, slice_num=4)
         attention.temperature.data.zero_()

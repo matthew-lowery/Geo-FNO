@@ -77,9 +77,11 @@ def divergence_loss(predictions, operators, mask, steps):
     return divergence[:, mask].square().mean(dim=1).sum() / steps
 
 
-def evaluate(model, positions, inputs, targets, normalizer, output_indices, batch_size):
+def evaluate(model, positions, inputs, targets, normalizer, output_indices, batch_size,
+             pooled=False):
     loss_fn = TestLoss(size_average=False)
     predictions, total = [], 0.
+    error_sq = target_sq = 0.
     with torch.no_grad():
         for start in range(0, len(inputs), batch_size):
             x = inputs[start:start + batch_size]
@@ -87,9 +89,21 @@ def evaluate(model, positions, inputs, targets, normalizer, output_indices, batc
             output = model(positions.expand(len(x), -1, -1), fx=x)
             output = normalizer.decode(output)[:, output_indices]
             require_finite(output, "evaluation prediction")
-            total += loss_fn(output.double().norm(dim=-1), y.double().norm(dim=-1)).item()
+            output_magnitude = output.double().norm(dim=-1)
+            target_magnitude = y.double().norm(dim=-1)
+            if pooled:
+                error_sq += (output_magnitude - target_magnitude).square().sum().item()
+                target_sq += target_magnitude.square().sum().item()
+            else:
+                total += loss_fn(output_magnitude, target_magnitude).item()
             predictions.append(output.cpu())
-    return torch.cat(predictions), total / len(inputs)
+    if pooled:
+        if target_sq == 0:
+            raise ValueError("OOD targets have zero pooled magnitude norm")
+        total = (error_sq / target_sq) ** .5
+    else:
+        total /= len(inputs)
+    return torch.cat(predictions), total
 
 
 def main():
@@ -199,10 +213,14 @@ def main():
                 raise ValueError("OOD grid differs from the training grid")
             x = input_normalizer.encode(pad_inputs(x, len(grid), input_indices).to(device))
             y = torch.tensor(y, dtype=torch.float32, device=device)
+            pooled_ood = args.dataset in {"taylor_green", "taylor_green_spacetime"}
             _, ood_loss = evaluate(
                 model, positions, x, y, output_normalizer, output_indices, args.batch_size,
+                pooled=pooled_ood,
             )
-            artifacts.log({"ood_loss": ood_loss})
+            artifacts.log({"ood_loss": ood_loss,
+                           "ood_metric": "pooled_magnitude_relative_l2" if pooled_ood
+                           else "mean_magnitude_relative_l2"})
     if args.save and args.calc_div:
         args.div_folder.mkdir(parents=True, exist_ok=True)
         savemat(args.div_folder / f"{name}.mat", {

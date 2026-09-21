@@ -27,7 +27,7 @@ $pycmd
 EOF
 }
 ### tune for tgtc and tgc
-dir='/projects/bfel/mlowery/geo-fno-new'
+dir='/projects/bgcs/mlowery/geo-fno-new'
 for res1d in 10 15 20 25 30; do
 sp "python3 ramansh_3d.py --data-root=/projects/bgcs/mlowery/ram_dataset --dataset='taylor_green_time_coeffs' --wandb --ntrain=500 --npoints=$npoints --dataset=$dataset --norm-grid --res1d=$res1d --width=32 --modes=$((res1d/2))"
 done
