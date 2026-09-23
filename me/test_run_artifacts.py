@@ -53,6 +53,35 @@ class RunArtifactsTest(unittest.TestCase):
             artifacts.log({"ood_loss": float("inf")})
         self.assertEqual(json.loads(artifacts.metrics_path.read_text())["metrics"]["ood_loss"], "inf")
 
+    def test_finalize_metrics_relogs_complete_finite_record(self):
+        tracker = Tracker()
+        with patch("run_artifacts.wandb", tracker), contextlib.redirect_stdout(io.StringIO()) as output:
+            artifacts = RunArtifacts(self.args, "run")
+            artifacts.log({"test_loss": .1})
+            artifacts.log({"total_train_time": 12.})
+            artifacts.finalize_metrics(
+                {"test_loss", "total_train_time"},
+                {"test_loss", "total_train_time"},
+            )
+        self.assertEqual(tracker.summary["test_loss"], .1)
+        self.assertIn("METRICS_COMPLETE", output.getvalue())
+
+    def test_finalize_metrics_rejects_missing_or_nonfinite_values(self):
+        with patch("run_artifacts.wandb", Tracker()):
+            artifacts = RunArtifacts(self.args, "run")
+            artifacts.log({"test_loss": float("nan")})
+            with self.assertRaisesRegex(RuntimeError, "total_train_time"):
+                artifacts.finalize_metrics(
+                    {"test_loss", "total_train_time"},
+                    {"test_loss", "total_train_time"},
+                )
+            artifacts.log({"total_train_time": 12.})
+            with self.assertRaisesRegex(FloatingPointError, "test_loss"):
+                artifacts.finalize_metrics(
+                    {"test_loss", "total_train_time"},
+                    {"test_loss", "total_train_time"},
+                )
+
     def test_complete_checkpoint_roundtrip_and_rng(self):
         torch.manual_seed(4)
         model, iphi = torch.nn.Linear(2, 2), torch.nn.Linear(2, 2)

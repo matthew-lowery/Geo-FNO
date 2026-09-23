@@ -75,6 +75,19 @@ class RunArtifacts:
             wandb.run.summary.update(metrics)
             wandb.log(metrics)  # Final metrics never reuse an earlier epoch step.
 
+    def finalize_metrics(self, required, finite):
+        missing = sorted(set(required) - self.metrics.keys())
+        if missing:
+            raise RuntimeError(f"Run finished without required metrics: {missing}")
+        nonfinite = sorted(
+            key for key in finite
+            if not math.isfinite(float(self.metrics[key]))
+        )
+        if nonfinite:
+            raise FloatingPointError(f"Run finished with nonfinite metrics: {nonfinite}")
+        self.log(self.metrics.copy())
+        print(f"METRICS_COMPLETE {sorted(required)}", flush=True)
+
     def save(self, epoch, model, normalizers, geometry, optimizers, schedulers, iphi=None):
         if not self.args.save:
             return
