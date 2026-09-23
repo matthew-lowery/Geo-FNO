@@ -2,9 +2,9 @@
 set -euo pipefail
 
 ME_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON="$(command -v "${TRAIN_PYTHON:-python}")"
+PYTHON="${TRAIN_PYTHON:-/u/rsharma15/.conda/envs/operator-benchmarks-gpu/bin/python}"
 DATA_ROOT="${RAM_DATA_ROOT:-/u/rsharma15/pde_ml/code/op_dataset}"
-RESULTS_ROOT="${RAM_RESULTS_ROOT:-/projects/bgcs/mlowery/operator-benchmarks/forced-recovery-20260923}"
+RESULTS_ROOT="${RAM_RESULTS_ROOT:-/u/rsharma15/operator-benchmarks/forced-recovery-20260923}"
 dry_run=false
 case "${1:-}" in
     --dry-run) dry_run=true ;;
@@ -15,6 +15,7 @@ esac
 
 active_jobs=""
 if [[ "$dry_run" == false ]]; then
+    PYTHON="$(command -v "$PYTHON")"
     [[ -r "$DATA_ROOT/forced_turb/data.mat" && -r "$DATA_ROOT/forced_turb/data_ood.mat" ]] || {
         echo "Missing forced_turb/data.mat or data_ood.mat under $DATA_ROOT" >&2
         exit 1
@@ -43,7 +44,7 @@ sp() {
 #SBATCH --cpus-per-task=1
 #SBATCH --gpus-per-node=1
 #SBATCH --partition=gpuA100x4
-#SBATCH --account=bgcs-delta-gpu
+#SBATCH --account=bgkk-delta-gpu
 #SBATCH --constraint=scratch
 #SBATCH --job-name=$job_name
 #SBATCH --time=${hours}:00:00
