@@ -3,7 +3,7 @@ set -euo pipefail
 
 ME_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON="$(command -v "${TRAIN_PYTHON:-python}")"
-DATA_ROOT="${RAM_DATA_ROOT:-/projects/bgcs/mlowery/ram_dataset}"
+DATA_ROOT="${RAM_DATA_ROOT:-/u/rsharma15/pde_ml/code/op_dataset}"
 RESULTS_ROOT="${RAM_RESULTS_ROOT:-/projects/bgcs/mlowery/operator-benchmarks/forced-recovery-20260923}"
 dry_run=false
 case "${1:-}" in

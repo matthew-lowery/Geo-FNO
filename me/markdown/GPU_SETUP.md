@@ -55,6 +55,6 @@ Newly submitted jobs train from the beginning. Settings remain 500 epochs and 7,
 
 The hour limits use the measured full-size rates of about 236 seconds per epoch for Geo-FNO and 47 for Transolver. Multiply by 500 epochs and the training-size fraction of 10,000, add 35% headroom plus one hour, then round up. Full-size Geo-FNO training alone took roughly 32.5 hours, hence the 46-hour allocation.
 
-Datasets: `/projects/bgcs/mlowery/ram_dataset`. New outputs: `/projects/bgcs/mlowery/operator-benchmarks/forced-recovery-20260923`. Override with `RAM_DATA_ROOT` and `RAM_RESULTS_ROOT`. Slurm text logs go to `out/` and `err/` beside the script.
+Forced-turbulence data: `/u/rsharma15/pde_ml/code/op_dataset/forced_turb/`, containing `data.mat` and `data_ood.mat`. The script passes the parent `/u/rsharma15/pde_ml/code/op_dataset` as `--data-root`; the loader appends `forced_turb/`. Override that parent with `RAM_DATA_ROOT`. New outputs: `/projects/bgcs/mlowery/operator-benchmarks/forced-recovery-20260923`, overridable with `RAM_RESULTS_ROOT`. Slurm text logs go to `out/` and `err/` beside the script.
 
 Final metrics are written to W&B summary/history, printed as `METRICS` in stdout, and stored beside checkpoints as `.metrics.json`: total train time in seconds, test loss, interior divergence maximum/median, and OOD loss/metric for baselines. A missing or nonfinite required metric makes the trainer fail before reporting successful completion.
