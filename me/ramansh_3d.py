@@ -348,4 +348,13 @@ if args.save and args.calc_div:
     scipy.io.savemat(os.path.join(args.div_folder, f'{name}.mat'), {'x_grid': physical_output_grid,
                                                            'y_preds_test': y_preds_test.cpu().numpy().astype(np.float64)})
 
+required_metrics = {"test_loss", "eval_time", "total_train_time"}
+finite_metrics = required_metrics.copy()
+if args.calc_div:
+    required_metrics.update({"test_div/max_abs_interior", "test_div/median_abs_interior"})
+    finite_metrics.update({"test_div/max_abs_interior", "test_div/median_abs_interior"})
+if args.require_ood:
+    required_metrics.update({"ood_available", "ood_loss", "ood_metric"})
+    finite_metrics.add("ood_loss")
+artifacts.finalize_metrics(required_metrics, finite_metrics)
 wandb.finish()
