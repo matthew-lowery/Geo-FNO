@@ -9,7 +9,6 @@ cd /u/rsharma15/Geo-FNO/me
 conda env create --prefix /u/rsharma15/.conda/envs/operator-benchmarks-gpu -f environment.yml
 conda activate /u/rsharma15/.conda/envs/operator-benchmarks-gpu
 python -m pip check
-wandb login
 ```
 
 [`environment.yml`](../environment.yml) is the Conda equivalent of a requirements file. It installs Python 3.10.18 and the project's dependencies in a separate environment; Conda installs its `pip` section automatically. [Conda environment documentation](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html).
@@ -33,9 +32,12 @@ Expected: PyTorch `2.9.1+cu128`, CUDA `12.8`, an A100 device name, and `4.0`. Th
 cd /u/rsharma15/Geo-FNO/me
 conda activate /u/rsharma15/.conda/envs/operator-benchmarks-gpu
 export TRAIN_PYTHON="$CONDA_PREFIX/bin/python"
+export WANDB_API_KEY='YOUR_WANDB_API_KEY'
 bash train_forced_recovery_explicit.sh --dry-run
 bash train_forced_recovery_explicit.sh
 ```
+
+Replace `YOUR_WANDB_API_KEY` with the raw API key from Matt's W&B account in the submission shell. Submission requires the key and passes the exported environment to every Slurm job via `--export=ALL`; the key is not embedded in generated job scripts. Every job explicitly runs `wandb.login(key=os.environ["WANDB_API_KEY"], relogin=True, verify=True)` with the training environment's Python before training. A rejected key stops the job immediately. No separate manual login is needed. [W&B login documentation](https://docs.wandb.ai/models/ref/python/functions/login).
 
 [`train_forced_recovery_explicit.sh`](../train_forced_recovery_explicit.sh) contains 16 explicit training commands, ordered shortest to longest. Its default Python is `/u/rsharma15/.conda/envs/operator-benchmarks-gpu/bin/python`, overridable with `TRAIN_PYTHON`. It finds the training code relative to the script's own location. Each GPU job checks CUDA and package imports before training.
 

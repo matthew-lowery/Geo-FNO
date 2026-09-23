@@ -15,6 +15,7 @@ esac
 
 active_jobs=""
 if [[ "$dry_run" == false ]]; then
+    : "${WANDB_API_KEY:?Export WANDB_API_KEY before submitting jobs}"
     PYTHON="$(command -v "$PYTHON")"
     [[ -r "$DATA_ROOT/forced_turb/data.mat" && -r "$DATA_ROOT/forced_turb/data_ood.mat" ]] || {
         echo "Missing forced_turb/data.mat or data_ood.mat under $DATA_ROOT" >&2
@@ -36,7 +37,7 @@ sp() {
         echo "Skip queued/running: $job_name"
         return
     fi
-    sbatch <<EOF
+    sbatch --export=ALL <<EOF
 #!/bin/bash
 #SBATCH --mem=32g
 #SBATCH --nodes=1
@@ -55,6 +56,7 @@ set -euo pipefail
 module purge
 cd "$ME_DIR"
 export PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MPLBACKEND=Agg
+"$PYTHON" -c 'import os, wandb; assert wandb.login(key=os.environ["WANDB_API_KEY"], relogin=True, verify=True), "W&B login failed"'
 "$PYTHON" -c 'import torch, scipy, h5py, matplotlib, wandb, timm, einops; assert torch.cuda.is_available(), "CUDA unavailable"; print(torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0), flush=True)'
 $command
 EOF
